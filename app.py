@@ -6,6 +6,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -14,14 +15,29 @@ from fastapi import FastAPI
 
 TRADE_XYZ_API_URL = "https://api.hyperliquid.xyz/info"
 OSTIUM_METADATA_BASE = "https://metadata-backend.ostium.io"
-FWALERT_URL = os.getenv("FWALERT_URL", "")
-POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "5"))
-THRESHOLD = float(os.getenv("THRESHOLD", "3"))
-SYMBOL = os.getenv("SYMBOL", "CL")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("price-alerts")
 BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def load_dotenv() -> None:
+    env_path = Path(__file__).with_name('.env')
+    if not env_path.exists():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+load_dotenv()
+FWALERT_URL = os.getenv("FWALERT_URL", "")
+POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "5"))
+THRESHOLD = float(os.getenv("THRESHOLD", "3"))
+SYMBOL = os.getenv("SYMBOL", "CL")
 
 
 @dataclass
