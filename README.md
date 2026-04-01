@@ -8,7 +8,7 @@ This service monitors `CL` and triggers a phone alert through fwalert when eithe
 
 Notification suppression windows:
 - No alerts from **05:00 to 06:10 Beijing time**
-- No alerts on the weekend window starting from **Saturday 08:00 Beijing time** through all of Sunday
+- No alerts on the weekend window from **Saturday 08:00 Beijing time** through **Monday 06:00 Beijing time**
 
 Alert rules:
 

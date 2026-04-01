@@ -135,10 +135,12 @@ def fetch_ostium_cl() -> tuple[float, float]:
 def in_suppression_window(now: datetime | None = None) -> bool:
     now = now or datetime.now(BEIJING_TZ)
 
-    # Weekend mute window: Saturday 08:00 BJT through all of Sunday.
+    # Weekend mute window: Saturday 08:00 BJT through Monday 06:00 BJT.
     if now.weekday() == 5 and (now.hour > 8 or (now.hour == 8 and now.minute >= 0)):
         return True
     if now.weekday() == 6:
+        return True
+    if now.weekday() == 0 and now.hour < 6:
         return True
 
     # Daily mute window: 05:00-06:10 BJT.
