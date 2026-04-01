@@ -39,6 +39,11 @@ load_dotenv()
 FWALERT_URL = os.getenv("FWALERT_URL", "")
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "5"))
 THRESHOLD = float(os.getenv("THRESHOLD", "3"))
+OPEN_ALERT_HIGH_THRESHOLD = float(os.getenv("OPEN_ALERT_HIGH_THRESHOLD", "3.1"))
+OPEN_ALERT_LOW_RESET = float(os.getenv("OPEN_ALERT_LOW_RESET", "2.9"))
+CLOSE_ALERT_LOW_THRESHOLD = float(os.getenv("CLOSE_ALERT_LOW_THRESHOLD", "2.9"))
+CLOSE_ALERT_HIGH_RESET = float(os.getenv("CLOSE_ALERT_HIGH_RESET", "3.1"))
+SPREAD_ALERT_COOLDOWN_SECONDS = int(os.getenv("SPREAD_ALERT_COOLDOWN_SECONDS", "600"))
 SYMBOL = os.getenv("SYMBOL", "CL")
 TRADE_LIQUIDATION_PRICE = float(os.getenv("TRADE_LIQUIDATION_PRICE")) if os.getenv("TRADE_LIQUIDATION_PRICE") else None
 OSTIUM_LIQUIDATION_PRICE = float(os.getenv("OSTIUM_LIQUIDATION_PRICE")) if os.getenv("OSTIUM_LIQUIDATION_PRICE") else None
@@ -71,6 +76,7 @@ state: dict[str, Any] = {
     "started_at": None,
     "loop_count": 0,
     "last_liquidation_alerts": {},
+    "last_spread_alerts": {},
 }
 
 
@@ -195,6 +201,17 @@ def classify(value: float) -> str:
     return "gt" if value > THRESHOLD else "le"
 
 
+def spread_alert_allowed(event: str) -> bool:
+    last_sent = state["last_spread_alerts"].get(event)
+    if last_sent is None:
+        return True
+    return time.time() - last_sent >= SPREAD_ALERT_COOLDOWN_SECONDS
+
+
+def mark_spread_alert(event: str) -> None:
+    state["last_spread_alerts"][event] = time.time()
+
+
 def maybe_trigger_liquidation_alerts(snapshot: Snapshot) -> None:
     now_ts = time.time()
     venues = [
@@ -257,24 +274,28 @@ def monitor_loop() -> None:
             state["last_error"] = None
             state["loop_count"] += 1
 
-            open_regime = classify(snapshot.open_spread)
-            close_regime = classify(snapshot.close_spread)
+            open_spread = snapshot.open_spread
+            close_spread = snapshot.close_spread
 
             if state["open_regime"] is None:
-                state["open_regime"] = open_regime
-            elif state["open_regime"] == "le" and open_regime == "gt":
-                trigger_phone_alert("open_cross_up", snapshot)
-                state["open_regime"] = open_regime
-            else:
-                state["open_regime"] = open_regime
+                state["open_regime"] = "armed" if open_spread < OPEN_ALERT_LOW_RESET else "cooling"
+            elif state["open_regime"] == "armed" and open_spread > OPEN_ALERT_HIGH_THRESHOLD:
+                if spread_alert_allowed("open_cross_up"):
+                    trigger_phone_alert("open_cross_up", snapshot)
+                    mark_spread_alert("open_cross_up")
+                state["open_regime"] = "cooling"
+            elif open_spread < OPEN_ALERT_LOW_RESET:
+                state["open_regime"] = "armed"
 
             if state["close_regime"] is None:
-                state["close_regime"] = close_regime
-            elif state["close_regime"] == "gt" and close_regime == "le":
-                trigger_phone_alert("close_cross_down", snapshot)
-                state["close_regime"] = close_regime
-            else:
-                state["close_regime"] = close_regime
+                state["close_regime"] = "armed" if close_spread > CLOSE_ALERT_HIGH_RESET else "cooling"
+            elif state["close_regime"] == "armed" and close_spread < CLOSE_ALERT_LOW_THRESHOLD:
+                if spread_alert_allowed("close_cross_down"):
+                    trigger_phone_alert("close_cross_down", snapshot)
+                    mark_spread_alert("close_cross_down")
+                state["close_regime"] = "cooling"
+            elif close_spread > CLOSE_ALERT_HIGH_RESET:
+                state["close_regime"] = "armed"
 
             maybe_trigger_liquidation_alerts(snapshot)
 
@@ -297,6 +318,11 @@ def root() -> dict[str, Any]:
         "service": "price-alerts",
         "symbol": SYMBOL,
         "threshold": THRESHOLD,
+        "open_alert_high_threshold": OPEN_ALERT_HIGH_THRESHOLD,
+        "open_alert_low_reset": OPEN_ALERT_LOW_RESET,
+        "close_alert_low_threshold": CLOSE_ALERT_LOW_THRESHOLD,
+        "close_alert_high_reset": CLOSE_ALERT_HIGH_RESET,
+        "spread_alert_cooldown_seconds": SPREAD_ALERT_COOLDOWN_SECONDS,
         "trade_liquidation_price": TRADE_LIQUIDATION_PRICE,
         "ostium_liquidation_price": OSTIUM_LIQUIDATION_PRICE,
         "liquidation_alert_distance": LIQUIDATION_ALERT_DISTANCE,
@@ -317,6 +343,7 @@ def health() -> dict[str, Any]:
         "last_snapshot": state["last_snapshot"],
         "last_alert": state["last_alert"],
         "last_liquidation_alerts": state["last_liquidation_alerts"],
+        "last_spread_alerts": state["last_spread_alerts"],
     }
 
 
