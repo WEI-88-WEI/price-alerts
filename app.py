@@ -5,7 +5,9 @@ import os
 import threading
 import time
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import requests
 from fastapi import FastAPI
@@ -19,6 +21,7 @@ SYMBOL = os.getenv("SYMBOL", "CL")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("price-alerts")
+BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 
 
 @dataclass
@@ -89,7 +92,31 @@ def fetch_ostium_cl() -> tuple[float, float]:
     raise RuntimeError(f"{SYMBOL}/USD not found on ostium")
 
 
+def in_suppression_window(now: datetime | None = None) -> bool:
+    now = now or datetime.now(BEIJING_TZ)
+
+    # Weekend mute window: Saturday 08:00 BJT through all of Sunday.
+    if now.weekday() == 5 and (now.hour > 8 or (now.hour == 8 and now.minute >= 0)):
+        return True
+    if now.weekday() == 6:
+        return True
+
+    # Daily mute window: 05:00-06:10 BJT.
+    minutes = now.hour * 60 + now.minute
+    return 5 * 60 <= minutes <= (6 * 60 + 10)
+
+
 def trigger_phone_alert(event: str, snapshot: Snapshot) -> None:
+    if in_suppression_window():
+        logger.info("Suppressed alert for event=%s during mute window", event)
+        state["last_alert"] = {
+            "event": event,
+            "timestamp": time.time(),
+            "suppressed": True,
+            "snapshot": asdict(snapshot),
+        }
+        return
+
     try:
         response = requests.get(FWALERT_URL, timeout=15)
         response.raise_for_status()
@@ -97,6 +124,7 @@ def trigger_phone_alert(event: str, snapshot: Snapshot) -> None:
             "event": event,
             "timestamp": time.time(),
             "status_code": response.status_code,
+            "suppressed": False,
             "snapshot": asdict(snapshot),
         }
         logger.warning("Triggered fwalert for event=%s snapshot=%s", event, asdict(snapshot))
@@ -170,6 +198,7 @@ def root() -> dict[str, Any]:
         "service": "price-alerts",
         "symbol": SYMBOL,
         "threshold": THRESHOLD,
+        "suppression_active": in_suppression_window(),
         **state,
     }
 
@@ -180,6 +209,7 @@ def health() -> dict[str, Any]:
         "ok": state["last_error"] is None,
         "running": state["running"],
         "loop_count": state["loop_count"],
+        "suppression_active": in_suppression_window(),
         "last_error": state["last_error"],
         "last_snapshot": state["last_snapshot"],
         "last_alert": state["last_alert"],

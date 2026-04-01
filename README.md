@@ -4,7 +4,13 @@ Server-side price alert service for `CL` spread monitoring between `trade.xyz` a
 
 ## Rules
 
-This service monitors `CL` and triggers a phone alert through fwalert when either condition crosses the threshold `3`:
+This service monitors `CL` and triggers a phone alert through fwalert when either condition crosses the threshold `3`.
+
+Notification suppression windows:
+- No alerts from **05:00 to 06:10 Beijing time**
+- No alerts on the weekend window starting from **Saturday 08:00 Beijing time** through all of Sunday
+
+Alert rules:
 
 1. **Open signal**: alert when spread moves from `< 3` to `> 3`
    - Formula: `trade.xyz bid - ostium ask`
