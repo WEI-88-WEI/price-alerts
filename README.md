@@ -16,6 +16,10 @@ Alert rules:
    - Formula: `trade.xyz bid - ostium ask`
 2. **Close signal**: alert when spread moves from `> 3` to `< 3`
    - Formula: `trade.xyz ask - ostium bid`
+3. **Liquidation proximity alert**: alert when current mid price is within configured absolute distance of the liquidation price
+   - `abs(trade_mid - TRADE_LIQUIDATION_PRICE) <= LIQUIDATION_ALERT_DISTANCE`
+   - `abs(ostium_mid - OSTIUM_LIQUIDATION_PRICE) <= LIQUIDATION_ALERT_DISTANCE`
+   - cooldown is controlled by `LIQUIDATION_ALERT_COOLDOWN_SECONDS`
 
 ## Alert Channel
 

@@ -24,14 +24,14 @@ ALERTS_LOG_PATH = Path(__file__).with_name("alerts_log.jsonl")
 
 
 def load_dotenv() -> None:
-    env_path = Path(__file__).with_name('.env')
+    env_path = Path(__file__).with_name(".env")
     if not env_path.exists():
         return
     for line in env_path.read_text().splitlines():
         line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
+        if not line or line.startswith("#") or "=" not in line:
             continue
-        key, value = line.split('=', 1)
+        key, value = line.split("=", 1)
         os.environ.setdefault(key.strip(), value.strip())
 
 
@@ -40,6 +40,10 @@ FWALERT_URL = os.getenv("FWALERT_URL", "")
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "5"))
 THRESHOLD = float(os.getenv("THRESHOLD", "3"))
 SYMBOL = os.getenv("SYMBOL", "CL")
+TRADE_LIQUIDATION_PRICE = float(os.getenv("TRADE_LIQUIDATION_PRICE")) if os.getenv("TRADE_LIQUIDATION_PRICE") else None
+OSTIUM_LIQUIDATION_PRICE = float(os.getenv("OSTIUM_LIQUIDATION_PRICE")) if os.getenv("OSTIUM_LIQUIDATION_PRICE") else None
+LIQUIDATION_ALERT_DISTANCE = float(os.getenv("LIQUIDATION_ALERT_DISTANCE", "5"))
+LIQUIDATION_ALERT_COOLDOWN_SECONDS = int(os.getenv("LIQUIDATION_ALERT_COOLDOWN_SECONDS", "1800"))
 
 
 @dataclass
@@ -48,6 +52,10 @@ class Snapshot:
     trade_ask: float | None = None
     ostium_bid: float | None = None
     ostium_ask: float | None = None
+    trade_mid: float | None = None
+    ostium_mid: float | None = None
+    trade_liq_distance: float | None = None
+    ostium_liq_distance: float | None = None
     open_spread: float | None = None
     close_spread: float | None = None
     timestamp: float | None = None
@@ -62,7 +70,11 @@ state: dict[str, Any] = {
     "close_regime": None,
     "started_at": None,
     "loop_count": 0,
+    "last_liquidation_alerts": {},
 }
+
+
+app = FastAPI(title="price-alerts")
 
 
 def append_alert_record(record: dict[str, Any]) -> None:
@@ -85,8 +97,6 @@ def read_recent_alerts(limit: int = 50) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
     return records
-
-app = FastAPI(title="price-alerts")
 
 
 def fetch_trade_xyz_cl() -> tuple[float, float]:
@@ -135,7 +145,6 @@ def fetch_ostium_cl() -> tuple[float, float]:
 def in_suppression_window(now: datetime | None = None) -> bool:
     now = now or datetime.now(BEIJING_TZ)
 
-    # Weekend mute window: Saturday 08:00 BJT through Monday 06:00 BJT.
     if now.weekday() == 5 and (now.hour > 8 or (now.hour == 8 and now.minute >= 0)):
         return True
     if now.weekday() == 6:
@@ -143,12 +152,11 @@ def in_suppression_window(now: datetime | None = None) -> bool:
     if now.weekday() == 0 and now.hour < 6:
         return True
 
-    # Daily mute window: 05:00-06:10 BJT.
     minutes = now.hour * 60 + now.minute
     return 5 * 60 <= minutes <= (6 * 60 + 10)
 
 
-def trigger_phone_alert(event: str, snapshot: Snapshot) -> None:
+def trigger_phone_alert(event: str, snapshot: Snapshot, extra: dict[str, Any] | None = None) -> None:
     record = {
         "event": event,
         "timestamp": time.time(),
@@ -158,6 +166,8 @@ def trigger_phone_alert(event: str, snapshot: Snapshot) -> None:
         "open_regime_before": state.get("open_regime"),
         "close_regime_before": state.get("close_regime"),
     }
+    if extra:
+        record.update(extra)
 
     if in_suppression_window():
         logger.info("Suppressed alert for event=%s during mute window", event)
@@ -185,6 +195,37 @@ def classify(value: float) -> str:
     return "gt" if value > THRESHOLD else "le"
 
 
+def maybe_trigger_liquidation_alerts(snapshot: Snapshot) -> None:
+    now_ts = time.time()
+    venues = [
+        ("trade", snapshot.trade_mid, TRADE_LIQUIDATION_PRICE, snapshot.trade_liq_distance),
+        ("ostium", snapshot.ostium_mid, OSTIUM_LIQUIDATION_PRICE, snapshot.ostium_liq_distance),
+    ]
+
+    for venue, mid_price, liq_price, distance in venues:
+        if liq_price is None or mid_price is None or distance is None:
+            continue
+        if distance > LIQUIDATION_ALERT_DISTANCE:
+            continue
+
+        last_sent = state["last_liquidation_alerts"].get(venue)
+        if last_sent is not None and now_ts - last_sent < LIQUIDATION_ALERT_COOLDOWN_SECONDS:
+            continue
+
+        trigger_phone_alert(
+            f"{venue}_liquidation_near",
+            snapshot,
+            extra={
+                "venue": venue,
+                "mid_price": mid_price,
+                "liquidation_price": liq_price,
+                "distance": distance,
+                "cooldown_seconds": LIQUIDATION_ALERT_COOLDOWN_SECONDS,
+            },
+        )
+        state["last_liquidation_alerts"][venue] = now_ts
+
+
 def monitor_loop() -> None:
     state["running"] = True
     state["started_at"] = time.time()
@@ -194,12 +235,20 @@ def monitor_loop() -> None:
         try:
             trade_bid, trade_ask = fetch_trade_xyz_cl()
             ostium_bid, ostium_ask = fetch_ostium_cl()
+            trade_mid = (trade_bid + trade_ask) / 2
+            ostium_mid = (ostium_bid + ostium_ask) / 2
+            trade_liq_distance = abs(trade_mid - TRADE_LIQUIDATION_PRICE) if TRADE_LIQUIDATION_PRICE is not None else None
+            ostium_liq_distance = abs(ostium_mid - OSTIUM_LIQUIDATION_PRICE) if OSTIUM_LIQUIDATION_PRICE is not None else None
 
             snapshot = Snapshot(
                 trade_bid=trade_bid,
                 trade_ask=trade_ask,
                 ostium_bid=ostium_bid,
                 ostium_ask=ostium_ask,
+                trade_mid=trade_mid,
+                ostium_mid=ostium_mid,
+                trade_liq_distance=trade_liq_distance,
+                ostium_liq_distance=ostium_liq_distance,
                 open_spread=trade_bid - ostium_ask,
                 close_spread=trade_ask - ostium_bid,
                 timestamp=time.time(),
@@ -227,6 +276,8 @@ def monitor_loop() -> None:
             else:
                 state["close_regime"] = close_regime
 
+            maybe_trigger_liquidation_alerts(snapshot)
+
         except Exception as exc:
             state["last_error"] = str(exc)
             logger.exception("Monitor loop error")
@@ -246,6 +297,10 @@ def root() -> dict[str, Any]:
         "service": "price-alerts",
         "symbol": SYMBOL,
         "threshold": THRESHOLD,
+        "trade_liquidation_price": TRADE_LIQUIDATION_PRICE,
+        "ostium_liquidation_price": OSTIUM_LIQUIDATION_PRICE,
+        "liquidation_alert_distance": LIQUIDATION_ALERT_DISTANCE,
+        "liquidation_alert_cooldown_seconds": LIQUIDATION_ALERT_COOLDOWN_SECONDS,
         "suppression_active": in_suppression_window(),
         **state,
     }
@@ -261,6 +316,7 @@ def health() -> dict[str, Any]:
         "last_error": state["last_error"],
         "last_snapshot": state["last_snapshot"],
         "last_alert": state["last_alert"],
+        "last_liquidation_alerts": state["last_liquidation_alerts"],
     }
 
 
