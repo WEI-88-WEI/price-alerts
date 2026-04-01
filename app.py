@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
@@ -19,6 +20,7 @@ OSTIUM_METADATA_BASE = "https://metadata-backend.ostium.io"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("price-alerts")
 BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+ALERTS_LOG_PATH = Path(__file__).with_name("alerts_log.jsonl")
 
 
 def load_dotenv() -> None:
@@ -61,6 +63,28 @@ state: dict[str, Any] = {
     "started_at": None,
     "loop_count": 0,
 }
+
+
+def append_alert_record(record: dict[str, Any]) -> None:
+    ALERTS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with ALERTS_LOG_PATH.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def read_recent_alerts(limit: int = 50) -> list[dict[str, Any]]:
+    if not ALERTS_LOG_PATH.exists():
+        return []
+    lines = ALERTS_LOG_PATH.read_text(encoding="utf-8").splitlines()
+    records: list[dict[str, Any]] = []
+    for line in lines[-limit:]:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return records
 
 app = FastAPI(title="price-alerts")
 
@@ -123,29 +147,35 @@ def in_suppression_window(now: datetime | None = None) -> bool:
 
 
 def trigger_phone_alert(event: str, snapshot: Snapshot) -> None:
+    record = {
+        "event": event,
+        "timestamp": time.time(),
+        "beijing_time": datetime.now(BEIJING_TZ).isoformat(),
+        "suppressed": False,
+        "snapshot": asdict(snapshot),
+        "open_regime_before": state.get("open_regime"),
+        "close_regime_before": state.get("close_regime"),
+    }
+
     if in_suppression_window():
         logger.info("Suppressed alert for event=%s during mute window", event)
-        state["last_alert"] = {
-            "event": event,
-            "timestamp": time.time(),
-            "suppressed": True,
-            "snapshot": asdict(snapshot),
-        }
+        record["suppressed"] = True
+        state["last_alert"] = record
+        append_alert_record(record)
         return
 
     try:
         response = requests.get(FWALERT_URL, timeout=15)
         response.raise_for_status()
-        state["last_alert"] = {
-            "event": event,
-            "timestamp": time.time(),
-            "status_code": response.status_code,
-            "suppressed": False,
-            "snapshot": asdict(snapshot),
-        }
+        record["status_code"] = response.status_code
+        state["last_alert"] = record
+        append_alert_record(record)
         logger.warning("Triggered fwalert for event=%s snapshot=%s", event, asdict(snapshot))
     except Exception as exc:
+        record["error"] = str(exc)
         state["last_error"] = f"alert_failed: {exc}"
+        state["last_alert"] = record
+        append_alert_record(record)
         logger.exception("Failed to trigger fwalert")
 
 
@@ -229,4 +259,13 @@ def health() -> dict[str, Any]:
         "last_error": state["last_error"],
         "last_snapshot": state["last_snapshot"],
         "last_alert": state["last_alert"],
+    }
+
+
+@app.get("/alerts")
+def alerts(limit: int = 50) -> dict[str, Any]:
+    safe_limit = max(1, min(limit, 500))
+    return {
+        "count": safe_limit,
+        "items": read_recent_alerts(safe_limit),
     }

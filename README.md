@@ -35,7 +35,17 @@ uvicorn app:app --host 0.0.0.0 --port 8790
 
 - `/`
 - `/health`
+- `/alerts` - recent persisted alert records
 - Default port: `8790`
+
+## Alert logging
+
+Every attempted notification is persisted to `alerts_log.jsonl`, including:
+- trigger time
+- event type
+- suppression status
+- HTTP result
+- spread snapshot at trigger time
 
 ## Deployment
 

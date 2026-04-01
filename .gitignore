@@ -3,4 +3,6 @@ __pycache__/
 .venv/
 .env
 server.log
+server-*.log
+alerts_log.jsonl
 .DS_Store
