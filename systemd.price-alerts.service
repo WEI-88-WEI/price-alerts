@@ -1,0 +1,17 @@
+[Unit]
+Description=price-alerts service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/price-alerts
+ExecStart=/home/ubuntu/.openclaw/workspace/price-alerts/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8790
+Restart=always
+RestartSec=5
+User=ubuntu
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/home/ubuntu/.openclaw/workspace/price-alerts/.env
+
+[Install]
+WantedBy=multi-user.target
