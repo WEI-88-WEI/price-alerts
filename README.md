@@ -14,12 +14,12 @@ Alert rules:
 
 1. **Open signal**: alert when spread moves from the low-reset zone to the breakout zone
    - Formula: `trade.xyz bid - ostium ask`
-   - Trigger when `open_spread > OPEN_ALERT_HIGH_THRESHOLD`
-   - Re-arm only after `open_spread < OPEN_ALERT_LOW_RESET`
+   - Trigger when `open_spread > 3.5`
+   - Re-arm only after `open_spread < 3.2`
 2. **Close signal**: alert when spread moves from the high-reset zone to the breakdown zone
    - Formula: `trade.xyz ask - ostium bid`
-   - Trigger when `close_spread < CLOSE_ALERT_LOW_THRESHOLD`
-   - Re-arm only after `close_spread > CLOSE_ALERT_HIGH_RESET`
+   - Trigger when `close_spread < 3.2`
+   - Re-arm only after `close_spread > 3.5`
    - Spread alerts also respect `SPREAD_ALERT_COOLDOWN_SECONDS`
 3. **Liquidation proximity alert**: alert when current mid price is within configured absolute distance of the liquidation price
    - `abs(trade_mid - TRADE_LIQUIDATION_PRICE) <= LIQUIDATION_ALERT_DISTANCE`
