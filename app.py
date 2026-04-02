@@ -151,7 +151,7 @@ def fetch_ostium_cl() -> tuple[float, float]:
 def in_suppression_window(now: datetime | None = None) -> bool:
     now = now or datetime.now(BEIJING_TZ)
 
-    if now.weekday() == 5 and (now.hour > 8 or (now.hour == 8 and now.minute >= 0)):
+    if now.weekday() == 5 and (now.hour > 7 or (now.hour == 7 and now.minute >= 59)):
         return True
     if now.weekday() == 6:
         return True
@@ -159,7 +159,7 @@ def in_suppression_window(now: datetime | None = None) -> bool:
         return True
 
     minutes = now.hour * 60 + now.minute
-    return 5 * 60 <= minutes <= (6 * 60 + 10)
+    return (4 * 60 + 59) <= minutes <= (6 * 60 + 10)
 
 
 def trigger_phone_alert(event: str, snapshot: Snapshot, extra: dict[str, Any] | None = None) -> None:
