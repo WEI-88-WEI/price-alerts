@@ -165,8 +165,8 @@
 
     <div class="chart-card">
       <div class="section-title">
-        <h2>按天统计</h2>
-        <span>看每天提醒次数和方向分布</span>
+        <h2>按天分线对比</h2>
+        <span>横轴统一看一天内的北京时间，不同日期各自一条线</span>
       </div>
       <canvas id="dailyChart" height="110"></canvas>
     </div>
@@ -295,31 +295,52 @@
     }
 
     function buildDailyChart(items) {
-      const bucket = new Map();
-      for (const item of items) {
-        const day = item.beijing_time.slice(0, 10);
-        if (!bucket.has(day)) bucket.set(day, { up: 0, down: 0 });
-        if (item.event === 'open_cross_up') bucket.get(day).up += 1;
-        if (item.event === 'close_cross_down') bucket.get(day).down += 1;
-      }
-      const labels = [...bucket.keys()];
-      const upData = labels.map(x => bucket.get(x).up);
-      const downData = labels.map(x => bucket.get(x).down);
+      const timeLabels = [...new Set(items.map(item => item.beijing_time.slice(11, 16)))].sort();
+      const days = [...new Set(items.map(item => item.beijing_time.slice(5, 10)))].sort();
+      const palette = ['#5da8ff', '#2ecc71', '#ff6b6b', '#f7c948', '#b084f5', '#4fd1c5'];
+
+      const datasets = days.map((day, index) => {
+        const dayItems = items.filter(item => item.beijing_time.slice(5, 10) === day);
+        const pointMap = new Map(dayItems.map(item => [item.beijing_time.slice(11, 16), spreadValue(item)]));
+        return {
+          label: day,
+          data: timeLabels.map(label => pointMap.has(label) ? pointMap.get(label) : null),
+          borderColor: palette[index % palette.length],
+          backgroundColor: palette[index % palette.length],
+          spanGaps: false,
+          tension: 0.2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        };
+      });
+
       new Chart(document.getElementById('dailyChart'), {
-        type: 'bar',
+        type: 'line',
         data: {
-          labels,
-          datasets: [
-            { label: '变大提醒', data: upData, backgroundColor: 'rgba(46,204,113,.75)' },
-            { label: '变小提醒', data: downData, backgroundColor: 'rgba(255,107,107,.75)' }
-          ]
+          labels: timeLabels,
+          datasets,
         },
         options: {
           responsive: true,
-          plugins: { legend: { labels: { color: '#e8edf7' } } },
+          plugins: {
+            legend: { labels: { color: '#e8edf7' } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label} 价差: ${ctx.raw == null ? '-' : Number(ctx.raw).toFixed(4)}`
+              }
+            }
+          },
           scales: {
-            x: { stacked: true, ticks: { color: '#9fb0cc' }, grid: { color: 'rgba(255,255,255,.06)' } },
-            y: { stacked: true, ticks: { color: '#9fb0cc', precision: 0 }, grid: { color: 'rgba(255,255,255,.06)' } }
+            x: {
+              title: { display: true, text: '北京时间（一天内时刻）', color: '#9fb0cc' },
+              ticks: { color: '#9fb0cc' },
+              grid: { color: 'rgba(255,255,255,.06)' }
+            },
+            y: {
+              title: { display: true, text: '提醒时价差', color: '#9fb0cc' },
+              ticks: { color: '#9fb0cc' },
+              grid: { color: 'rgba(255,255,255,.06)' }
+            }
           }
         }
       });
