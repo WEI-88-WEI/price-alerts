@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>价差提醒图表</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a2b;
+      --panel-2: #18233a;
+      --text: #e8edf7;
+      --muted: #9fb0cc;
+      --green: #2ecc71;
+      --red: #ff6b6b;
+      --blue: #5da8ff;
+      --yellow: #f7c948;
+      --border: rgba(255,255,255,.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0b1020 0%, #0f1728 100%);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+    }
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 14px;
+      text-align: right;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: rgba(18,26,43,.92);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.2);
+    }
+    .card .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .card .value {
+      font-size: 28px;
+      font-weight: 700;
+    }
+    .chart-card, .table-card {
+      background: rgba(18,26,43,.92);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      margin-bottom: 18px;
+    }
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .section-title h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .section-title span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .table-wrap {
+      overflow: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 12px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .tag.up { background: rgba(46,204,113,.14); color: #7ef0a8; }
+    .tag.down { background: rgba(255,107,107,.14); color: #ff9c9c; }
+    .tag.muted { background: rgba(255,255,255,.08); color: var(--muted); }
+    .num { font-variant-numeric: tabular-nums; }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero { flex-direction: column; align-items: flex-start; }
+      .meta { text-align: left; }
+    }
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+      .wrap { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <h1>价差提醒日报图表</h1>
+        <p>统一使用北京时间，按天聚合展示提醒历史，重点看：价差、方向（变大 / 变小）、时间。</p>
+      </div>
+      <div class="meta">
+        <div>数据来源：/alerts</div>
+        <div id="updatedAt">加载中...</div>
+      </div>
+    </div>
+
+    <div class="grid" id="summary"></div>
+
+    <div class="chart-card">
+      <div class="section-title">
+        <h2>按时间的提醒价差</h2>
+        <span>绿色代表变大（open_cross_up），红色代表变小（close_cross_down）</span>
+      </div>
+      <canvas id="spreadChart" height="110"></canvas>
+    </div>
+
+    <div class="chart-card">
+      <div class="section-title">
+        <h2>按天统计</h2>
+        <span>看每天提醒次数和方向分布</span>
+      </div>
+      <canvas id="dailyChart" height="110"></canvas>
+    </div>
+
+    <div class="table-card">
+      <div class="section-title">
+        <h2>明细表</h2>
+        <span>适合快速复盘每一条提醒</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>北京时间</th>
+              <th>方向</th>
+              <th>事件</th>
+              <th>价差</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const fmtNum = (v) => typeof v === 'number' ? v.toFixed(4) : '-';
+    const directionOf = (event) => event === 'open_cross_up' ? '变大' : event === 'close_cross_down' ? '变小' : '其他';
+    const eventColor = (event) => event === 'open_cross_up' ? '#2ecc71' : event === 'close_cross_down' ? '#ff6b6b' : '#5da8ff';
+    const spreadValue = (item) => item.event === 'open_cross_up' ? item.snapshot?.open_spread : item.event === 'close_cross_down' ? item.snapshot?.close_spread : null;
+
+    async function load() {
+      const res = await fetch('/alerts');
+      const raw = await res.json();
+      const items = (raw.items || []).filter(x => x.event === 'open_cross_up' || x.event === 'close_cross_down');
+
+      document.getElementById('updatedAt').textContent = `最近刷新：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`;
+
+      const summary = buildSummary(items);
+      document.getElementById('summary').innerHTML = summary.map(x => `
+        <div class="card">
+          <div class="label">${x.label}</div>
+          <div class="value">${x.value}</div>
+        </div>
+      `).join('');
+
+      buildTable(items);
+      buildSpreadChart(items);
+      buildDailyChart(items);
+    }
+
+    function buildSummary(items) {
+      const ups = items.filter(x => x.event === 'open_cross_up').length;
+      const downs = items.filter(x => x.event === 'close_cross_down').length;
+      const latest = items.at(-1);
+      const maxSpread = items.reduce((m, x) => Math.max(m, spreadValue(x) ?? -Infinity), -Infinity);
+      return [
+        { label: '总提醒数', value: String(items.length) },
+        { label: '变大提醒数', value: String(ups) },
+        { label: '变小提醒数', value: String(downs) },
+        { label: '最大记录价差', value: Number.isFinite(maxSpread) ? maxSpread.toFixed(4) : '-' },
+        { label: '最近一条方向', value: latest ? directionOf(latest.event) : '-' },
+        { label: '最近一条时间', value: latest ? latest.beijing_time.slice(11, 19) : '-' },
+        { label: '最近一条价差', value: latest ? fmtNum(spreadValue(latest)) : '-' },
+        { label: '按天展示', value: '北京时间' },
+      ];
+    }
+
+    function buildTable(items) {
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = items.map(item => {
+        const dir = directionOf(item.event);
+        const spread = spreadValue(item);
+        const cls = item.event === 'open_cross_up' ? 'up' : 'down';
+        const ok = item.suppressed ? '静默拦截' : item.status_code === 200 ? '已发送' : '未知';
+        return `
+          <tr>
+            <td class="num">${item.beijing_time.replace('T', ' ').slice(0, 19)}</td>
+            <td><span class="tag ${cls}">${dir}</span></td>
+            <td>${item.event}</td>
+            <td class="num">${fmtNum(spread)}</td>
+            <td><span class="tag ${item.suppressed ? 'muted' : cls}">${ok}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function buildSpreadChart(items) {
+      const labels = items.map(x => x.beijing_time.replace('T', ' ').slice(5, 19));
+      const values = items.map(spreadValue);
+      const colors = items.map(x => eventColor(x.event));
+      new Chart(document.getElementById('spreadChart'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: '提醒时价差',
+            data: values,
+            borderColor: '#5da8ff',
+            backgroundColor: 'rgba(93,168,255,.15)',
+            tension: 0.25,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointBackgroundColor: colors,
+            pointBorderColor: colors,
+            fill: true,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { labels: { color: '#e8edf7' } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `价差: ${Number(ctx.raw).toFixed(4)}`
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { color: '#9fb0cc' }, grid: { color: 'rgba(255,255,255,.06)' } },
+            y: { ticks: { color: '#9fb0cc' }, grid: { color: 'rgba(255,255,255,.06)' } }
+          }
+        }
+      });
+    }
+
+    function buildDailyChart(items) {
+      const bucket = new Map();
+      for (const item of items) {
+        const day = item.beijing_time.slice(0, 10);
+        if (!bucket.has(day)) bucket.set(day, { up: 0, down: 0 });
+        if (item.event === 'open_cross_up') bucket.get(day).up += 1;
+        if (item.event === 'close_cross_down') bucket.get(day).down += 1;
+      }
+      const labels = [...bucket.keys()];
+      const upData = labels.map(x => bucket.get(x).up);
+      const downData = labels.map(x => bucket.get(x).down);
+      new Chart(document.getElementById('dailyChart'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: '变大提醒', data: upData, backgroundColor: 'rgba(46,204,113,.75)' },
+            { label: '变小提醒', data: downData, backgroundColor: 'rgba(255,107,107,.75)' }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { labels: { color: '#e8edf7' } } },
+          scales: {
+            x: { stacked: true, ticks: { color: '#9fb0cc' }, grid: { color: 'rgba(255,255,255,.06)' } },
+            y: { stacked: true, ticks: { color: '#9fb0cc', precision: 0 }, grid: { color: 'rgba(255,255,255,.06)' } }
+          }
+        }
+      });
+    }
+
+    load().catch(err => {
+      document.body.innerHTML = `<pre style="padding:24px;color:#fff;">图表加载失败\n${String(err)}</pre>`;
+    });
+  </script>
+</body>
+</html>

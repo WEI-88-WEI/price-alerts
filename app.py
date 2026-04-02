@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 
 TRADE_XYZ_API_URL = "https://api.hyperliquid.xyz/info"
 OSTIUM_METADATA_BASE = "https://metadata-backend.ostium.io"
@@ -354,3 +355,8 @@ def alerts(limit: int = 50) -> dict[str, Any]:
         "count": safe_limit,
         "items": read_recent_alerts(safe_limit),
     }
+
+
+@app.get("/chart")
+def chart() -> FileResponse:
+    return FileResponse(Path(__file__).with_name("chart.html"))
