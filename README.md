@@ -26,41 +26,40 @@
 
 ## 价差提醒规则
 
-### 开仓提醒 `open_cross_up`
+现在价差提醒已经重构为：**不再看固定价差阈值，而是看 1 分钟内的价差变化速度。**
 
-计算公式：
+系统持续采样两条价差：
 
 - `open_spread = trade bid - ostium ask`
-
-当前使用 **双阈值 + 冷却时间** 防止阈值附近反复抖动导致连续来电：
-
-- 触发阈值：`open_spread > 3.5`
-- 重新武装阈值：`open_spread < 3.2`
-- 冷却时间：`600` 秒
-
-含义：
-
-- 只有在 `open_spread` 先回到 **3.2 以下** 后，系统才会重新进入“可提醒”状态
-- 重新进入可提醒状态后，如果 `open_spread` 再次上穿 **3.5**，才会触发新的开仓提醒
-- 同类提醒还会受到 `SPREAD_ALERT_COOLDOWN_SECONDS` 限制，默认 **10 分钟内最多一次**
-
-### 平仓提醒 `close_cross_down`
-
-计算公式：
-
 - `close_spread = trade ask - ostium bid`
 
-当前规则：
+每次会回看大约 **60 秒前** 的最近样本，并计算：
 
-- 触发阈值：`close_spread < 3.2`
-- 重新武装阈值：`close_spread > 3.5`
-- 冷却时间：`600` 秒
+- `open_delta_60s = 当前 open_spread - 60 秒前 open_spread`
+- `close_delta_60s = 当前 close_spread - 60 秒前 close_spread`
 
-含义：
+当前提醒条件：
 
-- 只有在 `close_spread` 先回到 **3.5 以上** 后，系统才会重新进入“可提醒”状态
-- 重新进入可提醒状态后，如果 `close_spread` 再次跌破 **3.2**，才会触发新的平仓提醒
-- 同类提醒也受 `SPREAD_ALERT_COOLDOWN_SECONDS` 控制，默认 **10 分钟内最多一次**
+- `abs(open_delta_60s) > 0.8`
+- 或 `abs(close_delta_60s) > 0.8`
+
+### 方向说明
+
+- 如果 `open_delta_60s > 0.8`，说明 `open_spread` 在 1 分钟内明显**变大**
+- 如果 `open_delta_60s < -0.8`，说明 `open_spread` 在 1 分钟内明显**变小**
+- 如果 `close_delta_60s > 0.8`，说明 `close_spread` 在 1 分钟内明显**变大**
+- 如果 `close_delta_60s < -0.8`，说明 `close_spread` 在 1 分钟内明显**变小**
+
+### 当前配置
+
+- `SPREAD_CHANGE_WINDOW_SECONDS=60`
+- `SPREAD_CHANGE_THRESHOLD=0.8`
+
+注意：
+
+- **价差提醒不再使用 10 分钟冷却**
+- 只要新的 1 分钟变化再次超过阈值，就会再次提醒
+- **爆仓价提醒的冷却仍然保留**
 
 ## 爆仓价接近提醒
 

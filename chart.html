@@ -3,164 +3,63 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>价差提醒图表</title>
+  <title>价差变速提醒图表</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --bg: #0b1020;
       --panel: #121a2b;
-      --panel-2: #18233a;
       --text: #e8edf7;
       --muted: #9fb0cc;
       --green: #2ecc71;
       --red: #ff6b6b;
       --blue: #5da8ff;
-      --yellow: #f7c948;
       --border: rgba(255,255,255,.08);
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: linear-gradient(180deg, #0b1020 0%, #0f1728 100%);
-      color: var(--text);
-    }
-    .wrap {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 24px;
-    }
-    .hero {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-    .hero h1 {
-      margin: 0 0 8px;
-      font-size: 30px;
-    }
-    .hero p {
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.6;
-    }
-    .meta {
-      color: var(--muted);
-      font-size: 14px;
-      text-align: right;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
-      margin-bottom: 18px;
-    }
-    .card {
-      background: rgba(18,26,43,.92);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 16px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.2);
-    }
-    .card .label {
-      color: var(--muted);
-      font-size: 13px;
-      margin-bottom: 8px;
-    }
-    .card .value {
-      font-size: 28px;
-      font-weight: 700;
-    }
-    .chart-card, .table-card {
-      background: rgba(18,26,43,.92);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 18px;
-      margin-bottom: 18px;
-    }
-    .section-title {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-    .section-title h2 {
-      margin: 0;
-      font-size: 18px;
-    }
-    .section-title span {
-      color: var(--muted);
-      font-size: 13px;
-    }
-    .table-wrap {
-      overflow: auto;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    th, td {
-      padding: 12px 10px;
-      border-bottom: 1px solid var(--border);
-      text-align: left;
-      vertical-align: top;
-    }
-    th {
-      color: var(--muted);
-      font-weight: 600;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-    }
-    .tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .tag.up { background: rgba(46,204,113,.14); color: #7ef0a8; }
-    .tag.down { background: rgba(255,107,107,.14); color: #ff9c9c; }
-    .tag.muted { background: rgba(255,255,255,.08); color: var(--muted); }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: linear-gradient(180deg, #0b1020 0%, #0f1728 100%); color: var(--text); }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 24px; }
+    .hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
+    .hero h1 { margin: 0 0 8px; font-size: 30px; }
+    .hero p, .meta { margin: 0; color: var(--muted); line-height: 1.6; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+    .card, .chart-card, .table-card { background: rgba(18,26,43,.92); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+    .card .label { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+    .card .value { font-size: 28px; font-weight: 700; }
+    .chart-card, .table-card { margin-bottom: 18px; }
+    .section-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .section-title h2 { margin: 0; font-size: 18px; }
+    .section-title span { color: var(--muted); font-size: 13px; }
+    .table-wrap { overflow: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 12px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+    .tag { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600; }
+    .up { background: rgba(46,204,113,.14); color: #7ef0a8; }
+    .down { background: rgba(255,107,107,.14); color: #ff9c9c; }
     .num { font-variant-numeric: tabular-nums; }
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .hero { flex-direction: column; align-items: flex-start; }
-      .meta { text-align: left; }
-    }
-    @media (max-width: 640px) {
-      .grid { grid-template-columns: 1fr; }
-      .wrap { padding: 16px; }
-    }
+    @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero { flex-direction: column; align-items: flex-start; } }
+    @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } .wrap { padding: 16px; } }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="hero">
       <div>
-        <h1>价差提醒日报图表</h1>
-        <p>统一使用北京时间，按天聚合展示提醒历史，重点看：价差、方向（变大 / 变小）、时间。</p>
+        <h1>价差变速提醒图表</h1>
+        <p>统一使用北京时间，重点展示 1 分钟内价差变化值、方向（变大 / 变小）、时间，并支持按天分线对比。</p>
       </div>
-      <div class="meta">
-        <div>数据来源：/alerts</div>
-        <div id="updatedAt">加载中...</div>
-      </div>
+      <div class="meta" id="updatedAt">加载中...</div>
     </div>
 
     <div class="grid" id="summary"></div>
 
     <div class="chart-card">
       <div class="section-title">
-        <h2>按时间的提醒价差</h2>
-        <span>绿色代表变大（open_cross_up），红色代表变小（close_cross_down）</span>
+        <h2>按时间的 1 分钟价差变化</h2>
+        <span>绿色代表变大，红色代表变小</span>
       </div>
-      <canvas id="spreadChart" height="110"></canvas>
+      <canvas id="deltaChart" height="110"></canvas>
     </div>
 
     <div class="chart-card">
@@ -174,16 +73,18 @@
     <div class="table-card">
       <div class="section-title">
         <h2>明细表</h2>
-        <span>适合快速复盘每一条提醒</span>
+        <span>展示方向、当前价差、60 秒前价差和 1 分钟变化</span>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>北京时间</th>
+              <th>对象</th>
               <th>方向</th>
-              <th>事件</th>
-              <th>价差</th>
+              <th>当前价差</th>
+              <th>60秒前价差</th>
+              <th>1分钟变化</th>
               <th>状态</th>
             </tr>
           </thead>
@@ -195,97 +96,73 @@
 
   <script>
     const fmtNum = (v) => typeof v === 'number' ? v.toFixed(4) : '-';
-    const directionOf = (event) => event === 'open_cross_up' ? '变大' : event === 'close_cross_down' ? '变小' : '其他';
-    const eventColor = (event) => event === 'open_cross_up' ? '#2ecc71' : event === 'close_cross_down' ? '#ff6b6b' : '#5da8ff';
-    const spreadValue = (item) => item.event === 'open_cross_up' ? item.snapshot?.open_spread : item.event === 'close_cross_down' ? item.snapshot?.close_spread : null;
+    const isSpreadEvent = (item) => String(item.event || '').includes('_1m_');
+    const directionClass = (item) => item.delta_60s > 0 ? 'up' : 'down';
 
     async function load() {
-      const res = await fetch('/alerts');
+      const res = await fetch('/alerts?limit=500');
       const raw = await res.json();
-      const items = (raw.items || []).filter(x => x.event === 'open_cross_up' || x.event === 'close_cross_down');
-
+      const items = (raw.items || []).filter(isSpreadEvent);
       document.getElementById('updatedAt').textContent = `最近刷新：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })}`;
-
-      const summary = buildSummary(items);
-      document.getElementById('summary').innerHTML = summary.map(x => `
-        <div class="card">
-          <div class="label">${x.label}</div>
-          <div class="value">${x.value}</div>
-        </div>
-      `).join('');
-
+      buildSummary(items);
       buildTable(items);
-      buildSpreadChart(items);
+      buildDeltaChart(items);
       buildDailyChart(items);
     }
 
     function buildSummary(items) {
-      const ups = items.filter(x => x.event === 'open_cross_up').length;
-      const downs = items.filter(x => x.event === 'close_cross_down').length;
+      const ups = items.filter(x => (x.delta_60s || 0) > 0).length;
+      const downs = items.filter(x => (x.delta_60s || 0) < 0).length;
+      const maxAbs = items.reduce((m, x) => Math.max(m, Math.abs(x.delta_60s || 0)), 0);
       const latest = items.at(-1);
-      const maxSpread = items.reduce((m, x) => Math.max(m, spreadValue(x) ?? -Infinity), -Infinity);
-      return [
-        { label: '总提醒数', value: String(items.length) },
-        { label: '变大提醒数', value: String(ups) },
-        { label: '变小提醒数', value: String(downs) },
-        { label: '最大记录价差', value: Number.isFinite(maxSpread) ? maxSpread.toFixed(4) : '-' },
-        { label: '最近一条方向', value: latest ? directionOf(latest.event) : '-' },
-        { label: '最近一条时间', value: latest ? latest.beijing_time.slice(11, 19) : '-' },
-        { label: '最近一条价差', value: latest ? fmtNum(spreadValue(latest)) : '-' },
-        { label: '按天展示', value: '北京时间' },
-      ];
+      document.getElementById('summary').innerHTML = [
+        ['总提醒数', String(items.length)],
+        ['变大提醒数', String(ups)],
+        ['变小提醒数', String(downs)],
+        ['最大1分钟变化', maxAbs ? maxAbs.toFixed(4) : '-'],
+        ['最近对象', latest?.spread_name || '-'],
+        ['最近方向', latest?.direction || '-'],
+        ['最近时间', latest ? latest.beijing_time.slice(11, 19) : '-'],
+        ['最近变化值', latest ? fmtNum(latest.delta_60s) : '-'],
+      ].map(([label, value]) => `
+        <div class="card">
+          <div class="label">${label}</div>
+          <div class="value">${value}</div>
+        </div>
+      `).join('');
     }
 
     function buildTable(items) {
       const tbody = document.getElementById('tbody');
-      tbody.innerHTML = items.map(item => {
-        const dir = directionOf(item.event);
-        const spread = spreadValue(item);
-        const cls = item.event === 'open_cross_up' ? 'up' : 'down';
-        const ok = item.suppressed ? '静默拦截' : item.status_code === 200 ? '已发送' : '未知';
-        return `
-          <tr>
-            <td class="num">${item.beijing_time.replace('T', ' ').slice(0, 19)}</td>
-            <td><span class="tag ${cls}">${dir}</span></td>
-            <td>${item.event}</td>
-            <td class="num">${fmtNum(spread)}</td>
-            <td><span class="tag ${item.suppressed ? 'muted' : cls}">${ok}</span></td>
-          </tr>
-        `;
-      }).join('');
+      tbody.innerHTML = items.map(item => `
+        <tr>
+          <td class="num">${item.beijing_time.replace('T', ' ').slice(0, 19)}</td>
+          <td>${item.spread_name || '-'}</td>
+          <td><span class="tag ${directionClass(item)}">${item.direction || '-'}</span></td>
+          <td class="num">${fmtNum(item.current_spread)}</td>
+          <td class="num">${fmtNum(item.previous_spread)}</td>
+          <td class="num">${fmtNum(item.delta_60s)}</td>
+          <td>${item.suppressed ? '静默拦截' : item.status_code === 200 ? '已发送' : '未知'}</td>
+        </tr>
+      `).join('');
     }
 
-    function buildSpreadChart(items) {
-      const labels = items.map(x => x.beijing_time.replace('T', ' ').slice(5, 19));
-      const values = items.map(spreadValue);
-      const colors = items.map(x => eventColor(x.event));
-      new Chart(document.getElementById('spreadChart'), {
-        type: 'line',
+    function buildDeltaChart(items) {
+      new Chart(document.getElementById('deltaChart'), {
+        type: 'bar',
         data: {
-          labels,
+          labels: items.map(x => x.beijing_time.replace('T', ' ').slice(5, 19)),
           datasets: [{
-            label: '提醒时价差',
-            data: values,
-            borderColor: '#5da8ff',
-            backgroundColor: 'rgba(93,168,255,.15)',
-            tension: 0.25,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            pointBackgroundColor: colors,
-            pointBorderColor: colors,
-            fill: true,
+            label: '1分钟变化值',
+            data: items.map(x => x.delta_60s),
+            backgroundColor: items.map(x => x.delta_60s > 0 ? 'rgba(46,204,113,.8)' : 'rgba(255,107,107,.8)'),
+            borderColor: items.map(x => x.delta_60s > 0 ? '#2ecc71' : '#ff6b6b'),
+            borderWidth: 1,
           }]
         },
         options: {
           responsive: true,
-          plugins: {
-            legend: { labels: { color: '#e8edf7' } },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => `价差: ${Number(ctx.raw).toFixed(4)}`
-              }
-            }
-          },
+          plugins: { legend: { labels: { color: '#e8edf7' } } },
           scales: {
             x: { ticks: { color: '#9fb0cc' }, grid: { color: 'rgba(255,255,255,.06)' } },
             y: { ticks: { color: '#9fb0cc' }, grid: { color: 'rgba(255,255,255,.06)' } }
@@ -298,35 +175,30 @@
       const timeLabels = [...new Set(items.map(item => item.beijing_time.slice(11, 16)))].sort();
       const days = [...new Set(items.map(item => item.beijing_time.slice(5, 10)))].sort();
       const palette = ['#5da8ff', '#2ecc71', '#ff6b6b', '#f7c948', '#b084f5', '#4fd1c5'];
-
       const datasets = days.map((day, index) => {
         const dayItems = items.filter(item => item.beijing_time.slice(5, 10) === day);
-        const pointMap = new Map(dayItems.map(item => [item.beijing_time.slice(11, 16), spreadValue(item)]));
+        const pointMap = new Map(dayItems.map(item => [item.beijing_time.slice(11, 16), item.delta_60s]));
         return {
           label: day,
           data: timeLabels.map(label => pointMap.has(label) ? pointMap.get(label) : null),
           borderColor: palette[index % palette.length],
           backgroundColor: palette[index % palette.length],
-          spanGaps: false,
           tension: 0.2,
           pointRadius: 4,
           pointHoverRadius: 6,
+          spanGaps: false,
         };
       });
-
       new Chart(document.getElementById('dailyChart'), {
         type: 'line',
-        data: {
-          labels: timeLabels,
-          datasets,
-        },
+        data: { labels: timeLabels, datasets },
         options: {
           responsive: true,
           plugins: {
             legend: { labels: { color: '#e8edf7' } },
             tooltip: {
               callbacks: {
-                label: (ctx) => `${ctx.dataset.label} 价差: ${ctx.raw == null ? '-' : Number(ctx.raw).toFixed(4)}`
+                label: (ctx) => `${ctx.dataset.label} 变化值: ${ctx.raw == null ? '-' : Number(ctx.raw).toFixed(4)}`
               }
             }
           },
@@ -337,7 +209,7 @@
               grid: { color: 'rgba(255,255,255,.06)' }
             },
             y: {
-              title: { display: true, text: '提醒时价差', color: '#9fb0cc' },
+              title: { display: true, text: '1分钟价差变化值', color: '#9fb0cc' },
               ticks: { color: '#9fb0cc' },
               grid: { color: 'rgba(255,255,255,.06)' }
             }
