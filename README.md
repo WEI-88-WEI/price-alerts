@@ -79,27 +79,27 @@
 
 ### 当前配置
 
-- `TRADE_LIQUIDATION_PRICE=116`
+- `TRADE_LIQUIDATION_PRICE=120`
 - `OSTIUM_LIQUIDATION_PRICE=78`
 - `LIQUIDATION_ALERT_DISTANCE=5`
 - `LIQUIDATION_ALERT_COOLDOWN_SECONDS=1800`
 
 也就是说：
 
-- 当 `trade.xyz` 的 `CL mid` 距离 `116` 只剩 **5** 以内时，会触发电话提醒
+- 当 `trade.xyz` 的 `CL mid` 距离 `120` 只剩 **5** 以内时，会触发电话提醒
 - 当 `ostium` 的 `CL mid` 距离 `78` 只剩 **5** 以内时，会触发电话提醒
 - 同一平台的爆仓提醒默认 **30 分钟冷却一次**
 
-## 静默规则（按北京时间）
+## 提醒开关规则
 
-当前静默规则如下：
+现在不再按北京时间静默。
 
-1. **每天 04:59 ~ 06:10 不通知**
-2. **周六 07:59 开始，到周一 06:00 之前不通知**
+当前是否允许提醒，直接取决于 Ostium 返回的市场状态字段：
 
-注意：
+- `isMarketOpen=true`：允许提醒
+- `isMarketOpen=false`：不提醒，并将告警记录标记为 `suppressed=true`，原因是 `ostium_market_closed`
 
-- 因为保留了“每天 04:59 ~ 06:10 静默”，所以周一真正恢复提醒的时间实际上是 **06:11** 之后
+当前抓价仍然会继续，但只有在 Ostium 开市时才会实际触发电话提醒。
 
 ## 电话告警
 
@@ -139,7 +139,7 @@
 作用：
 
 - 返回最近的告警记录
-- 包含时间、事件类型、是否静默、HTTP 返回状态、价差快照等信息
+- 包含时间、事件类型、是否被市场关闭拦截、HTTP 返回状态、价差快照等信息
 
 另外还提供一个图表页：
 
@@ -163,7 +163,7 @@
 - 触发时间
 - 北京时间
 - 事件类型
-- 是否被静默规则拦截
+- 是否被市场关闭状态拦截
 - `fwalert` 返回状态
 - 当时的价格快照
 - `open_spread`
@@ -205,7 +205,7 @@ POLL_INTERVAL_SECONDS=5
 SPREAD_CHANGE_WINDOW_SECONDS=60
 SPREAD_CHANGE_THRESHOLD=0.8
 SYMBOL=CL
-TRADE_LIQUIDATION_PRICE=116
+TRADE_LIQUIDATION_PRICE=120
 OSTIUM_LIQUIDATION_PRICE=78
 LIQUIDATION_ALERT_DISTANCE=5
 LIQUIDATION_ALERT_COOLDOWN_SECONDS=1800
@@ -218,7 +218,7 @@ LIQUIDATION_ALERT_COOLDOWN_SECONDS=1800
 - `trade.xyz` / `ostium` 双边 `CL` 抓价
 - 价差提醒
 - 爆仓价接近提醒
-- 北京时间静默规则
+- 按 `isMarketOpen` 控制提醒开关
 - 电话告警
 - 告警历史记录
 - `systemd` 正式托管

@@ -61,6 +61,9 @@ class Snapshot:
     ostium_liq_distance: float | None = None
     open_spread: float | None = None
     close_spread: float | None = None
+    ostium_is_market_open: bool | None = None
+    ostium_is_day_trading_closed: bool | None = None
+    ostium_seconds_to_toggle_day_trading_closed: int | None = None
     timestamp: float | None = None
 
 
@@ -73,6 +76,7 @@ state: dict[str, Any] = {
     "loop_count": 0,
     "last_liquidation_alerts": {},
     "spread_history_size": 0,
+    "ostium_is_market_open": None,
 }
 
 spread_history: deque[dict[str, float]] = deque(maxlen=600)
@@ -130,7 +134,7 @@ def fetch_trade_xyz_cl() -> tuple[float, float]:
     raise RuntimeError(f"{SYMBOL} not found on trade.xyz")
 
 
-def fetch_ostium_cl() -> tuple[float, float]:
+def fetch_ostium_cl() -> tuple[float, float, bool, bool, int]:
     response = requests.get(f"{OSTIUM_METADATA_BASE}/PricePublish/latest-prices", timeout=30)
     response.raise_for_status()
     prices = response.json()
@@ -139,23 +143,12 @@ def fetch_ostium_cl() -> tuple[float, float]:
         if item.get("from") == SYMBOL and item.get("to") == "USD":
             bid = float(item["bid"])
             ask = float(item["ask"])
-            return bid, ask
+            is_market_open = bool(item.get("isMarketOpen"))
+            is_day_trading_closed = bool(item.get("isDayTradingClosed"))
+            seconds_to_toggle = int(item.get("secondsToToggleIsDayTradingClosed", -1))
+            return bid, ask, is_market_open, is_day_trading_closed, seconds_to_toggle
 
     raise RuntimeError(f"{SYMBOL}/USD not found on ostium")
-
-
-def in_suppression_window(now: datetime | None = None) -> bool:
-    now = now or datetime.now(BEIJING_TZ)
-
-    if now.weekday() == 5 and (now.hour > 7 or (now.hour == 7 and now.minute >= 59)):
-        return True
-    if now.weekday() == 6:
-        return True
-    if now.weekday() == 0 and now.hour < 6:
-        return True
-
-    minutes = now.hour * 60 + now.minute
-    return (4 * 60 + 59) <= minutes <= (6 * 60 + 10)
 
 
 def trigger_phone_alert(event: str, snapshot: Snapshot, extra: dict[str, Any] | None = None) -> None:
@@ -169,9 +162,10 @@ def trigger_phone_alert(event: str, snapshot: Snapshot, extra: dict[str, Any] | 
     if extra:
         record.update(extra)
 
-    if in_suppression_window():
-        logger.info("Suppressed alert for event=%s during mute window", event)
+    if snapshot.ostium_is_market_open is False:
+        logger.info("Suppressed alert for event=%s because ostium market is closed", event)
         record["suppressed"] = True
+        record["suppression_reason"] = "ostium_market_closed"
         state["last_alert"] = record
         append_alert_record(record)
         return
@@ -276,7 +270,7 @@ def monitor_loop() -> None:
     while True:
         try:
             trade_bid, trade_ask = fetch_trade_xyz_cl()
-            ostium_bid, ostium_ask = fetch_ostium_cl()
+            ostium_bid, ostium_ask, ostium_is_market_open, ostium_is_day_trading_closed, ostium_seconds_to_toggle = fetch_ostium_cl()
             trade_mid = (trade_bid + trade_ask) / 2
             ostium_mid = (ostium_bid + ostium_ask) / 2
             trade_liq_distance = abs(trade_mid - TRADE_LIQUIDATION_PRICE) if TRADE_LIQUIDATION_PRICE is not None else None
@@ -293,9 +287,13 @@ def monitor_loop() -> None:
                 ostium_liq_distance=ostium_liq_distance,
                 open_spread=trade_bid - ostium_ask,
                 close_spread=trade_ask - ostium_bid,
+                ostium_is_market_open=ostium_is_market_open,
+                ostium_is_day_trading_closed=ostium_is_day_trading_closed,
+                ostium_seconds_to_toggle_day_trading_closed=ostium_seconds_to_toggle,
                 timestamp=time.time(),
             )
             state["last_snapshot"] = asdict(snapshot)
+            state["ostium_is_market_open"] = ostium_is_market_open
             state["last_error"] = None
             state["loop_count"] += 1
 
@@ -335,7 +333,8 @@ def root() -> dict[str, Any]:
         "ostium_liquidation_price": OSTIUM_LIQUIDATION_PRICE,
         "liquidation_alert_distance": LIQUIDATION_ALERT_DISTANCE,
         "liquidation_alert_cooldown_seconds": LIQUIDATION_ALERT_COOLDOWN_SECONDS,
-        "suppression_active": in_suppression_window(),
+        "suppression_active": state["ostium_is_market_open"] is False,
+        "suppression_reason": "ostium_market_closed" if state["ostium_is_market_open"] is False else None,
         **state,
     }
 
@@ -346,7 +345,8 @@ def health() -> dict[str, Any]:
         "ok": state["last_error"] is None,
         "running": state["running"],
         "loop_count": state["loop_count"],
-        "suppression_active": in_suppression_window(),
+        "suppression_active": state["ostium_is_market_open"] is False,
+        "suppression_reason": "ostium_market_closed" if state["ostium_is_market_open"] is False else None,
         "last_error": state["last_error"],
         "last_snapshot": state["last_snapshot"],
         "last_alert": state["last_alert"],
