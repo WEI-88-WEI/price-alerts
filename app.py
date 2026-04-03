@@ -167,7 +167,6 @@ def trigger_phone_alert(event: str, snapshot: Snapshot, extra: dict[str, Any] | 
         record["suppressed"] = True
         record["suppression_reason"] = "ostium_market_closed"
         state["last_alert"] = record
-        append_alert_record(record)
         return
 
     try:
