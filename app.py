@@ -77,6 +77,10 @@ state: dict[str, Any] = {
     "last_liquidation_alerts": {},
     "spread_history_size": 0,
     "ostium_is_market_open": None,
+    "spread_alert_armed": {
+        "open_spread": True,
+        "close_spread": True,
+    },
 }
 
 spread_history: deque[dict[str, float]] = deque(maxlen=600)
@@ -184,36 +188,38 @@ def trigger_phone_alert(event: str, snapshot: Snapshot, extra: dict[str, Any] | 
         logger.exception("Failed to trigger fwalert")
 
 
-def find_history_sample(window_seconds: int) -> dict[str, float] | None:
+def get_window_samples(window_seconds: int) -> list[dict[str, float]]:
     if not spread_history:
-        return None
+        return []
     target_ts = time.time() - window_seconds
-    candidate = None
-    for item in spread_history:
-        if item["timestamp"] <= target_ts:
-            candidate = item
-        else:
-            break
-    return candidate
+    return [item for item in spread_history if item["timestamp"] >= target_ts]
 
 
 def maybe_trigger_spread_change_alerts(snapshot: Snapshot) -> None:
-    history_sample = find_history_sample(SPREAD_CHANGE_WINDOW_SECONDS)
-    if history_sample is None:
+    window_samples = get_window_samples(SPREAD_CHANGE_WINDOW_SECONDS)
+    if not window_samples:
         return
 
     checks = [
-        ("open_spread", snapshot.open_spread, history_sample["open_spread"]),
-        ("close_spread", snapshot.close_spread, history_sample["close_spread"]),
+        ("open_spread", snapshot.open_spread),
+        ("close_spread", snapshot.close_spread),
     ]
 
-    for spread_name, current_value, old_value in checks:
-        delta = current_value - old_value
-        if abs(delta) <= SPREAD_CHANGE_THRESHOLD:
+    for spread_name, current_value in checks:
+        values = [item[spread_name] for item in window_samples]
+        values.append(current_value)
+        window_max = max(values)
+        window_min = min(values)
+        window_abs_move = window_max - window_min
+
+        if window_abs_move <= SPREAD_CHANGE_THRESHOLD:
+            state["spread_alert_armed"][spread_name] = True
             continue
 
-        direction = "up" if delta > 0 else "down"
-        event = f"{spread_name}_1m_{direction}"
+        if not state["spread_alert_armed"][spread_name]:
+            continue
+
+        event = f"{spread_name}_window_breakout"
         trigger_phone_alert(
             event,
             snapshot,
@@ -221,13 +227,14 @@ def maybe_trigger_spread_change_alerts(snapshot: Snapshot) -> None:
                 "spread_name": spread_name,
                 "window_seconds": SPREAD_CHANGE_WINDOW_SECONDS,
                 "threshold": SPREAD_CHANGE_THRESHOLD,
-                "previous_spread": old_value,
+                "window_max": window_max,
+                "window_min": window_min,
+                "window_abs_move": window_abs_move,
                 "current_spread": current_value,
-                "delta_60s": delta,
-                "direction": "变大" if delta > 0 else "变小",
-                "reference_time": datetime.fromtimestamp(history_sample["timestamp"], tz=BEIJING_TZ).isoformat(),
+                "direction": "区间波动放大",
             },
         )
+        state["spread_alert_armed"][spread_name] = False
 
 
 def maybe_trigger_liquidation_alerts(snapshot: Snapshot) -> None:

@@ -26,29 +26,29 @@
 
 ## 价差提醒规则
 
-现在价差提醒已经重构为：**不再看固定价差阈值，而是看 1 分钟内的价差变化速度。**
+现在价差提醒的规则是：**看最近 60 秒窗口内的最大绝对波动幅度。**
 
 系统持续采样两条价差：
 
 - `open_spread = trade bid - ostium ask`
 - `close_spread = trade ask - ostium bid`
 
-每次会回看大约 **60 秒前** 的最近样本，并计算：
+对于每条价差，在最近 **60 秒** 的窗口内计算：
 
-- `open_delta_60s = 当前 open_spread - 60 秒前 open_spread`
-- `close_delta_60s = 当前 close_spread - 60 秒前 close_spread`
+- `window_max = 这 60 秒内的最大值`
+- `window_min = 这 60 秒内的最小值`
+- `window_abs_move = window_max - window_min`
 
 当前提醒条件：
 
-- `abs(open_delta_60s) > 0.8`
-- 或 `abs(close_delta_60s) > 0.8`
+- `open_spread` 的 `window_abs_move > 0.8`
+- 或 `close_spread` 的 `window_abs_move > 0.8`
 
-### 方向说明
+### 触发方式
 
-- 如果 `open_delta_60s > 0.8`，说明 `open_spread` 在 1 分钟内明显**变大**
-- 如果 `open_delta_60s < -0.8`，说明 `open_spread` 在 1 分钟内明显**变小**
-- 如果 `close_delta_60s > 0.8`，说明 `close_spread` 在 1 分钟内明显**变大**
-- 如果 `close_delta_60s < -0.8`，说明 `close_spread` 在 1 分钟内明显**变小**
+- 只要最近 60 秒内曾经出现过一次绝对波动幅度大于阈值，就触发一次提醒
+- 同一个方向/同一个波动窗口不会连续重复提醒
+- 只有当窗口振幅重新回落到阈值以内后，才会重新进入可触发状态
 
 ### 当前配置
 
@@ -58,7 +58,7 @@
 注意：
 
 - **价差提醒不再使用 10 分钟冷却**
-- 只要新的 1 分钟变化再次超过阈值，就会再次提醒
+- 同一波动窗口只提醒一次，回落后才会重新 armed
 - **爆仓价提醒的冷却仍然保留**
 
 ## 爆仓价接近提醒
