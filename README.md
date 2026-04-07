@@ -41,8 +41,8 @@
 
 当前提醒条件：
 
-- `open_spread` 的 `window_abs_move > 0.8`
-- 或 `close_spread` 的 `window_abs_move > 0.8`
+- `open_spread` 的 `window_abs_move > 0.6`
+- 或 `close_spread` 的 `window_abs_move > 0.6`
 
 ### 触发方式
 
@@ -53,7 +53,7 @@
 ### 当前配置
 
 - `SPREAD_CHANGE_WINDOW_SECONDS=60`
-- `SPREAD_CHANGE_THRESHOLD=0.8`
+- `SPREAD_CHANGE_THRESHOLD=0.6`
 
 注意：
 
