@@ -96,10 +96,10 @@
 
 当前是否允许提醒，直接取决于 Ostium 返回的市场状态字段：
 
-- `isMarketOpen=true`：允许提醒
-- `isMarketOpen=false`：不提醒，也不写入 `alerts_log.jsonl`
+- `isMarketOpen=true`：允许提醒，也允许进行价差计算
+- `isMarketOpen=false`：不提醒；同时不计算价差、不做 spread alert 判定、也不写入价差历史
 
-当前抓价仍然会继续，但只有在 Ostium 开市时才会实际触发电话提醒。
+也就是说，Ostium 闭市时服务仍会抓两边原始价格并更新健康状态，但不会把闭市样本纳入价差逻辑。
 
 ## 电话告警
 

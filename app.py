@@ -196,6 +196,9 @@ def get_window_samples(window_seconds: int) -> list[dict[str, float]]:
 
 
 def maybe_trigger_spread_change_alerts(snapshot: Snapshot) -> None:
+    if snapshot.ostium_is_market_open is False:
+        return
+
     window_samples = get_window_samples(SPREAD_CHANGE_WINDOW_SECONDS)
     if not window_samples:
         return
@@ -282,6 +285,7 @@ def monitor_loop() -> None:
             trade_liq_distance = abs(trade_mid - TRADE_LIQUIDATION_PRICE) if TRADE_LIQUIDATION_PRICE is not None else None
             ostium_liq_distance = abs(ostium_mid - OSTIUM_LIQUIDATION_PRICE) if OSTIUM_LIQUIDATION_PRICE is not None else None
 
+            spread_enabled = ostium_is_market_open is not False
             snapshot = Snapshot(
                 trade_bid=trade_bid,
                 trade_ask=trade_ask,
@@ -291,8 +295,8 @@ def monitor_loop() -> None:
                 ostium_mid=ostium_mid,
                 trade_liq_distance=trade_liq_distance,
                 ostium_liq_distance=ostium_liq_distance,
-                open_spread=trade_bid - ostium_ask,
-                close_spread=trade_ask - ostium_bid,
+                open_spread=(trade_bid - ostium_ask) if spread_enabled else None,
+                close_spread=(trade_ask - ostium_bid) if spread_enabled else None,
                 ostium_is_market_open=ostium_is_market_open,
                 ostium_is_day_trading_closed=ostium_is_day_trading_closed,
                 ostium_seconds_to_toggle_day_trading_closed=ostium_seconds_to_toggle,
@@ -306,13 +310,14 @@ def monitor_loop() -> None:
             maybe_trigger_spread_change_alerts(snapshot)
             maybe_trigger_liquidation_alerts(snapshot)
 
-            spread_history.append(
-                {
-                    "timestamp": snapshot.timestamp,
-                    "open_spread": snapshot.open_spread,
-                    "close_spread": snapshot.close_spread,
-                }
-            )
+            if spread_enabled:
+                spread_history.append(
+                    {
+                        "timestamp": snapshot.timestamp,
+                        "open_spread": snapshot.open_spread,
+                        "close_spread": snapshot.close_spread,
+                    }
+                )
             state["spread_history_size"] = len(spread_history)
 
         except Exception as exc:
