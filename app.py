@@ -38,7 +38,8 @@ def load_dotenv() -> None:
 
 
 load_dotenv()
-FWALERT_URL = os.getenv("FWALERT_URL", "")
+SPREAD_FWALERT_URL = os.getenv("SPREAD_FWALERT_URL", os.getenv("FWALERT_URL", ""))
+LIQUIDATION_FWALERT_URL = os.getenv("LIQUIDATION_FWALERT_URL", os.getenv("FWALERT_URL", ""))
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "5"))
 SPREAD_CHANGE_WINDOW_SECONDS = int(os.getenv("SPREAD_CHANGE_WINDOW_SECONDS", "60"))
 SPREAD_CHANGE_THRESHOLD = float(os.getenv("SPREAD_CHANGE_THRESHOLD", "0.6"))
@@ -156,9 +157,16 @@ def fetch_ostium_cl() -> tuple[float, float, bool, bool, int]:
     raise RuntimeError(f"{SYMBOL}/USD not found on ostium")
 
 
-def trigger_phone_alert(event: str, snapshot: Snapshot, extra: dict[str, Any] | None = None) -> None:
+def trigger_phone_alert(
+    event: str,
+    snapshot: Snapshot,
+    alert_url: str,
+    channel: str,
+    extra: dict[str, Any] | None = None,
+) -> None:
     record = {
         "event": event,
+        "channel": channel,
         "timestamp": time.time(),
         "beijing_time": datetime.now(BEIJING_TZ).isoformat(),
         "suppressed": False,
@@ -174,19 +182,27 @@ def trigger_phone_alert(event: str, snapshot: Snapshot, extra: dict[str, Any] | 
         state["last_alert"] = record
         return
 
+    if not alert_url:
+        record["error"] = f"missing_{channel}_fwalert_url"
+        state["last_error"] = f"alert_failed: missing_{channel}_fwalert_url"
+        state["last_alert"] = record
+        append_alert_record(record)
+        logger.error("Missing fwalert url for channel=%s event=%s", channel, event)
+        return
+
     try:
-        response = requests.get(FWALERT_URL, timeout=15)
+        response = requests.get(alert_url, timeout=15)
         response.raise_for_status()
         record["status_code"] = response.status_code
         state["last_alert"] = record
         append_alert_record(record)
-        logger.warning("Triggered fwalert for event=%s snapshot=%s", event, asdict(snapshot))
+        logger.warning("Triggered fwalert for channel=%s event=%s snapshot=%s", channel, event, asdict(snapshot))
     except Exception as exc:
         record["error"] = str(exc)
         state["last_error"] = f"alert_failed: {exc}"
         state["last_alert"] = record
         append_alert_record(record)
-        logger.exception("Failed to trigger fwalert")
+        logger.exception("Failed to trigger fwalert for channel=%s", channel)
 
 
 def get_window_samples(window_seconds: int) -> list[dict[str, float]]:
@@ -231,6 +247,8 @@ def maybe_trigger_spread_change_alerts(snapshot: Snapshot) -> None:
         trigger_phone_alert(
             event,
             snapshot,
+            alert_url=SPREAD_FWALERT_URL,
+            channel="spread",
             extra={
                 "spread_name": spread_name,
                 "window_seconds": SPREAD_CHANGE_WINDOW_SECONDS,
@@ -265,6 +283,8 @@ def maybe_trigger_liquidation_alerts(snapshot: Snapshot) -> None:
         trigger_phone_alert(
             f"{venue}_liquidation_near",
             snapshot,
+            alert_url=LIQUIDATION_FWALERT_URL,
+            channel="liquidation",
             extra={
                 "venue": venue,
                 "mid_price": mid_price,
@@ -353,6 +373,8 @@ def root() -> dict[str, Any]:
     return {
         "service": "price-alerts",
         "symbol": SYMBOL,
+        "spread_fwalert_configured": bool(SPREAD_FWALERT_URL),
+        "liquidation_fwalert_configured": bool(LIQUIDATION_FWALERT_URL),
         "spread_change_window_seconds": SPREAD_CHANGE_WINDOW_SECONDS,
         "spread_change_threshold": SPREAD_CHANGE_THRESHOLD,
         "trade_liquidation_price": TRADE_LIQUIDATION_PRICE,

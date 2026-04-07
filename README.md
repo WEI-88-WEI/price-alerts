@@ -107,9 +107,17 @@
 
 电话告警通过 `fwalert` 完成。
 
+现在两类告警已拆分通道：
+
+- **价差告警**：走原来的 `SPREAD_FWALERT_URL`
+- **爆仓告警**：走独立的 `LIQUIDATION_FWALERT_URL`
+
 代码中不会保存你的私密 webhook，而是通过本地环境变量加载：
 
-- `FWALERT_URL`
+- `SPREAD_FWALERT_URL`：价差告警通道
+- `LIQUIDATION_FWALERT_URL`：爆仓告警通道
+
+为了兼容旧配置，如果你本地还保留了 `FWALERT_URL`，代码也会把它作为默认回退值；但现在推荐明确拆成两个独立变量。
 
 仓库中只保留：
 
@@ -202,7 +210,8 @@ journalctl -u price-alerts -n 100 --no-pager
 `.env` 中当前会用到这些参数：
 
 ```env
-FWALERT_URL=
+SPREAD_FWALERT_URL=
+LIQUIDATION_FWALERT_URL=
 POLL_INTERVAL_SECONDS=5
 SPREAD_CHANGE_WINDOW_SECONDS=60
 SPREAD_CHANGE_THRESHOLD=0.6
