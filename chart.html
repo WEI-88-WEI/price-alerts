@@ -97,9 +97,11 @@
 
     function normalize(item) {
       const event = String(item.event || '');
-      const isNew = event.includes('_1m_');
+      const isLegacy1m = event.includes('_1m_');
+      const isWindowBreakout = event.endsWith('_spread_window_breakout');
+      const status = item.suppressed ? '静默拦截' : item.status_code === 200 ? '已发送' : '未知';
 
-      if (isNew) {
+      if (isLegacy1m) {
         return {
           time: item.beijing_time,
           day: item.beijing_time.slice(5, 10),
@@ -108,7 +110,27 @@
           directionClass: item.delta_60s > 0 ? 'up' : 'down',
           value: item.current_spread,
           source: item.spread_name || event,
-          status: item.suppressed ? '静默拦截' : item.status_code === 200 ? '已发送' : '未知',
+          status,
+        };
+      }
+
+      if (isWindowBreakout) {
+        const spreadName = item.spread_name || (event.startsWith('open_') ? 'open_spread' : 'close_spread');
+        const currentValue = typeof item.current_spread === 'number'
+          ? item.current_spread
+          : spreadName === 'open_spread'
+            ? item.snapshot?.open_spread
+            : item.snapshot?.close_spread;
+        const direction = item.direction || '区间波动放大';
+        return {
+          time: item.beijing_time,
+          day: item.beijing_time.slice(5, 10),
+          clock: item.beijing_time.slice(11, 16),
+          direction,
+          directionClass: 'up',
+          value: currentValue,
+          source: spreadName,
+          status,
         };
       }
 
@@ -121,7 +143,7 @@
           directionClass: 'up',
           value: item.snapshot?.open_spread,
           source: 'open_spread',
-          status: item.suppressed ? '静默拦截' : item.status_code === 200 ? '已发送' : '未知',
+          status,
         };
       }
 
@@ -134,7 +156,20 @@
           directionClass: 'down',
           value: item.snapshot?.close_spread,
           source: 'close_spread',
-          status: item.suppressed ? '静默拦截' : item.status_code === 200 ? '已发送' : '未知',
+          status,
+        };
+      }
+
+      if (event === 'trade_liquidation_near' || event === 'ostium_liquidation_near') {
+        return {
+          time: item.beijing_time,
+          day: item.beijing_time.slice(5, 10),
+          clock: item.beijing_time.slice(11, 16),
+          direction: '爆仓接近',
+          directionClass: 'down',
+          value: item.distance,
+          source: event.replace('_liquidation_near', '_liquidation'),
+          status,
         };
       }
 
