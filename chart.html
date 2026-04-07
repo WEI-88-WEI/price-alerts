@@ -160,19 +160,6 @@
         };
       }
 
-      if (event === 'trade_liquidation_near' || event === 'ostium_liquidation_near') {
-        return {
-          time: item.beijing_time,
-          day: item.beijing_time.slice(5, 10),
-          clock: item.beijing_time.slice(11, 16),
-          direction: '爆仓接近',
-          directionClass: 'down',
-          value: item.distance,
-          source: event.replace('_liquidation_near', '_liquidation'),
-          status,
-        };
-      }
-
       return null;
     }
 
