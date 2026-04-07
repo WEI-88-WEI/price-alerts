@@ -77,6 +77,7 @@ state: dict[str, Any] = {
     "last_liquidation_alerts": {},
     "spread_history_size": 0,
     "ostium_is_market_open": None,
+    "spread_warmup_until": None,
     "spread_alert_armed": {
         "open_spread": True,
         "close_spread": True,
@@ -199,6 +200,10 @@ def maybe_trigger_spread_change_alerts(snapshot: Snapshot) -> None:
     if snapshot.ostium_is_market_open is False:
         return
 
+    warmup_until = state.get("spread_warmup_until")
+    if isinstance(warmup_until, (int, float)) and time.time() < warmup_until:
+        return
+
     window_samples = get_window_samples(SPREAD_CHANGE_WINDOW_SECONDS)
     if not window_samples:
         return
@@ -302,8 +307,18 @@ def monitor_loop() -> None:
                 ostium_seconds_to_toggle_day_trading_closed=ostium_seconds_to_toggle,
                 timestamp=time.time(),
             )
+            previous_market_open = state.get("ostium_is_market_open")
             state["last_snapshot"] = asdict(snapshot)
             state["ostium_is_market_open"] = ostium_is_market_open
+            if ostium_is_market_open is False:
+                state["spread_warmup_until"] = None
+            elif previous_market_open is False:
+                state["spread_warmup_until"] = time.time() + SPREAD_CHANGE_WINDOW_SECONDS
+                state["spread_alert_armed"] = {
+                    "open_spread": True,
+                    "close_spread": True,
+                }
+                spread_history.clear()
             state["last_error"] = None
             state["loop_count"] += 1
 

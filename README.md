@@ -49,6 +49,7 @@
 - 只要最近 60 秒内曾经出现过一次绝对波动幅度大于阈值，就触发一次提醒
 - 同一个方向/同一个波动窗口不会连续重复提醒
 - 只有当窗口振幅重新回落到阈值以内后，才会重新进入可触发状态
+- Ostium 从闭市切回开市后，会先进入 **60 秒 warm-up**：这段时间只收集新样本，不触发 spread alert
 
 ### 当前配置
 
@@ -100,6 +101,7 @@
 - `isMarketOpen=false`：不提醒；同时不计算价差、不做 spread alert 判定、也不写入价差历史
 
 也就是说，Ostium 闭市时服务仍会抓两边原始价格并更新健康状态，但不会把闭市样本纳入价差逻辑。
+当 Ostium 从闭市重新开市时，系统会清空旧的价差窗口，并进入一个与 `SPREAD_CHANGE_WINDOW_SECONDS` 等长的 warm-up 阶段；warm-up 期间只收集开市后的新样本，不触发 spread alert。
 
 ## 电话告警
 
@@ -203,7 +205,7 @@ journalctl -u price-alerts -n 100 --no-pager
 FWALERT_URL=
 POLL_INTERVAL_SECONDS=5
 SPREAD_CHANGE_WINDOW_SECONDS=60
-SPREAD_CHANGE_THRESHOLD=0.8
+SPREAD_CHANGE_THRESHOLD=0.6
 SYMBOL=CL
 TRADE_LIQUIDATION_PRICE=120
 OSTIUM_LIQUIDATION_PRICE=78
