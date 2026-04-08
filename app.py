@@ -44,7 +44,7 @@ LIQUIDATION_FWALERT_URL = os.getenv("LIQUIDATION_FWALERT_URL", os.getenv("FWALER
 POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL_SECONDS", "5"))
 SPREAD_CHANGE_WINDOW_SECONDS = int(os.getenv("SPREAD_CHANGE_WINDOW_SECONDS", "60"))
 SPREAD_CHANGE_THRESHOLD = float(os.getenv("SPREAD_CHANGE_THRESHOLD", "0.6"))
-SPREAD_BREAKOUT_HOLD_SECONDS = int(os.getenv("SPREAD_BREAKOUT_HOLD_SECONDS", "3"))
+SPREAD_BREAKOUT_CONFIRM_SAMPLES = int(os.getenv("SPREAD_BREAKOUT_CONFIRM_SAMPLES", "2"))
 SYMBOL = os.getenv("SYMBOL", "CL")
 TRADE_LIQUIDATION_PRICE = float(os.getenv("TRADE_LIQUIDATION_PRICE")) if os.getenv("TRADE_LIQUIDATION_PRICE") else None
 OSTIUM_LIQUIDATION_PRICE = float(os.getenv("OSTIUM_LIQUIDATION_PRICE")) if os.getenv("OSTIUM_LIQUIDATION_PRICE") else None
@@ -85,9 +85,9 @@ state: dict[str, Any] = {
         "open_spread": True,
         "close_spread": True,
     },
-    "spread_breakout_since": {
-        "open_spread": None,
-        "close_spread": None,
+    "spread_breakout_confirm_counts": {
+        "open_spread": 0,
+        "close_spread": 0,
     },
 }
 
@@ -278,16 +278,13 @@ def maybe_trigger_spread_change_alerts(snapshot: Snapshot) -> None:
 
         if window_abs_move <= SPREAD_CHANGE_THRESHOLD:
             state["spread_alert_armed"][spread_name] = True
-            state["spread_breakout_since"][spread_name] = None
+            state["spread_breakout_confirm_counts"][spread_name] = 0
             continue
 
-        breakout_since = state["spread_breakout_since"].get(spread_name)
-        now_ts = time.time()
-        if breakout_since is None:
-            state["spread_breakout_since"][spread_name] = now_ts
-            continue
+        state["spread_breakout_confirm_counts"][spread_name] += 1
+        confirm_count = state["spread_breakout_confirm_counts"][spread_name]
 
-        if now_ts - breakout_since < SPREAD_BREAKOUT_HOLD_SECONDS:
+        if confirm_count < SPREAD_BREAKOUT_CONFIRM_SAMPLES:
             continue
 
         if not state["spread_alert_armed"][spread_name]:
@@ -303,8 +300,8 @@ def maybe_trigger_spread_change_alerts(snapshot: Snapshot) -> None:
                 "spread_name": spread_name,
                 "window_seconds": SPREAD_CHANGE_WINDOW_SECONDS,
                 "threshold": SPREAD_CHANGE_THRESHOLD,
-                "hold_seconds": SPREAD_BREAKOUT_HOLD_SECONDS,
-                "breakout_since": breakout_since,
+                "confirm_samples": SPREAD_BREAKOUT_CONFIRM_SAMPLES,
+                "confirm_count": confirm_count,
                 "window_max": window_max,
                 "window_min": window_min,
                 "window_abs_move": window_abs_move,
@@ -390,9 +387,9 @@ def monitor_loop() -> None:
                     "open_spread": True,
                     "close_spread": True,
                 }
-                state["spread_breakout_since"] = {
-                    "open_spread": None,
-                    "close_spread": None,
+                state["spread_breakout_confirm_counts"] = {
+                    "open_spread": 0,
+                    "close_spread": 0,
                 }
                 spread_history.clear()
             state["last_error"] = None
@@ -433,7 +430,7 @@ def root() -> dict[str, Any]:
         "liquidation_fwalert_configured": bool(LIQUIDATION_FWALERT_URL),
         "spread_change_window_seconds": SPREAD_CHANGE_WINDOW_SECONDS,
         "spread_change_threshold": SPREAD_CHANGE_THRESHOLD,
-        "spread_breakout_hold_seconds": SPREAD_BREAKOUT_HOLD_SECONDS,
+        "spread_breakout_confirm_samples": SPREAD_BREAKOUT_CONFIRM_SAMPLES,
         "trade_liquidation_price": TRADE_LIQUIDATION_PRICE,
         "ostium_liquidation_price": OSTIUM_LIQUIDATION_PRICE,
         "liquidation_alert_distance": LIQUIDATION_ALERT_DISTANCE,
