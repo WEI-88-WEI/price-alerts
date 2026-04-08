@@ -49,8 +49,8 @@
 当前规则不是“一次超阈值就立刻告警”，而是：
 
 - 某条价差第一次满足 `window_abs_move > 0.6` 时，只记一次确认，不立刻提醒
-- 只有当**下一次采样**这条价差仍然满足 `window_abs_move > 0.6` 时，才会真正触发提醒
-- 也就是说，在默认 `POLL_INTERVAL_SECONDS=5` 下，实际语义是：**连续两次采样都 breakout 才提醒**
+- 只有当后续采样里，这条价差持续满足 `window_abs_move > 0.6`，并达到确认次数后，才会真正触发提醒
+- 也就是说，在默认 `POLL_INTERVAL_SECONDS=5` 下，实际语义是：**连续三次采样都 breakout 才提醒**
 - 同一个 breakout 窗口不会连续重复提醒
 - 只有当窗口振幅重新回落到阈值以内后，才会重新进入可触发状态
 - Ostium 从闭市切回开市后，会先进入 **60 秒 warm-up**：这段时间只收集新样本，不触发 spread alert
@@ -66,7 +66,7 @@
 
 - `SPREAD_CHANGE_WINDOW_SECONDS=60`
 - `SPREAD_CHANGE_THRESHOLD=0.6`
-- `SPREAD_BREAKOUT_CONFIRM_SAMPLES=2`
+- `SPREAD_BREAKOUT_CONFIRM_SAMPLES=3`
 
 注意：
 
@@ -250,7 +250,7 @@ LIQUIDATION_ALERT_COOLDOWN_SECONDS=1800
 
 - `trade.xyz` / `ostium` 双边 `CL` 抓价
 - 基于 60 秒窗口波动的价差提醒
-- 连续两次采样确认后的 spread 告警
+- 连续三次采样确认后的 spread 告警
 - 爆仓价接近提醒
 - 按 `isMarketOpen` 控制提醒开关
 - 电话告警
