@@ -46,15 +46,27 @@
 
 ### 触发方式
 
-- 只要最近 60 秒内曾经出现过一次绝对波动幅度大于阈值，就触发一次提醒
-- 同一个方向/同一个波动窗口不会连续重复提醒
+当前规则不是“一次超阈值就立刻告警”，而是：
+
+- 某条价差第一次满足 `window_abs_move > 0.6` 时，只记一次确认，不立刻提醒
+- 只有当**下一次采样**这条价差仍然满足 `window_abs_move > 0.6` 时，才会真正触发提醒
+- 也就是说，在默认 `POLL_INTERVAL_SECONDS=5` 下，实际语义是：**连续两次采样都 breakout 才提醒**
+- 同一个 breakout 窗口不会连续重复提醒
 - 只有当窗口振幅重新回落到阈值以内后，才会重新进入可触发状态
 - Ostium 从闭市切回开市后，会先进入 **60 秒 warm-up**：这段时间只收集新样本，不触发 spread alert
+
+程序内部会分别为两条价差单独计数：
+
+- `open_spread` 连续确认次数
+- `close_spread` 连续确认次数
+
+这样可以避免 `open_spread` 和 `close_spread` 互相串计数导致误报。
 
 ### 当前配置
 
 - `SPREAD_CHANGE_WINDOW_SECONDS=60`
 - `SPREAD_CHANGE_THRESHOLD=0.6`
+- `SPREAD_BREAKOUT_CONFIRM_SAMPLES=2`
 
 注意：
 
@@ -161,12 +173,21 @@
 - 展示价差是变大还是变小
 - 展示提醒时间、价差走势
 - 按天分线对比（例如 4-1 一条线、4-2 一条线）
+- 读取 `alerts_log.jsonl` 中的有效 JSON 行；损坏行会被跳过
 
 ### 3. 本地持久化文件
 
 告警记录会持久化写入：
 
 - `alerts_log.jsonl`
+
+当前写入方式已经做了保护：
+
+- 先写临时文件
+- 再 `flush + fsync`
+- 最后用原子替换覆盖正式日志
+
+这样即使遇到磁盘异常，也更不容易把原有 JSONL 写成半截脏数据。
 
 每条记录会尽量包含：
 
@@ -215,6 +236,7 @@ LIQUIDATION_FWALERT_URL=
 POLL_INTERVAL_SECONDS=5
 SPREAD_CHANGE_WINDOW_SECONDS=60
 SPREAD_CHANGE_THRESHOLD=0.6
+SPREAD_BREAKOUT_CONFIRM_SAMPLES=2
 SYMBOL=CL
 TRADE_LIQUIDATION_PRICE=140
 OSTIUM_LIQUIDATION_PRICE=80
@@ -227,11 +249,13 @@ LIQUIDATION_ALERT_COOLDOWN_SECONDS=1800
 当前这套服务已经具备：
 
 - `trade.xyz` / `ostium` 双边 `CL` 抓价
-- 价差提醒
+- 基于 60 秒窗口波动的价差提醒
+- 连续两次采样确认后的 spread 告警
 - 爆仓价接近提醒
 - 按 `isMarketOpen` 控制提醒开关
 - 电话告警
 - 告警历史记录
+- 日志安全写入保护
 - `systemd` 正式托管
 
 如果后续继续扩展，建议优先考虑：
