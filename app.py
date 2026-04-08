@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 import threading
 import time
 from collections import deque
@@ -91,8 +92,42 @@ app = FastAPI(title="price-alerts")
 
 def append_alert_record(record: dict[str, Any]) -> None:
     ALERTS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with ALERTS_LOG_PATH.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    line = json.dumps(record, ensure_ascii=False) + "\n"
+    fd = None
+    tmp_path = None
+    try:
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f".{ALERTS_LOG_PATH.name}.",
+            suffix=".tmp",
+            dir=str(ALERTS_LOG_PATH.parent),
+        )
+        tmp_path = Path(tmp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+            fd = None
+            if ALERTS_LOG_PATH.exists():
+                with ALERTS_LOG_PATH.open("r", encoding="utf-8", errors="ignore") as src:
+                    while True:
+                        chunk = src.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        tmp_file.write(chunk)
+            tmp_file.write(line)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+        os.replace(tmp_path, ALERTS_LOG_PATH)
+    except Exception as exc:
+        state["last_error"] = f"append_alert_record_failed: {exc}"
+        logger.exception("Failed to append alert record safely")
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def read_recent_alerts(limit: int = 50) -> list[dict[str, Any]]:
