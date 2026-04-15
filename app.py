@@ -252,6 +252,39 @@ def get_window_samples(window_seconds: int) -> list[dict[str, float]]:
     return [item for item in spread_history if item["timestamp"] >= target_ts]
 
 
+def build_spread_window_payload(
+    window_samples: list[dict[str, float]],
+    snapshot: Snapshot,
+) -> list[dict[str, float | str | None]]:
+    samples = list(window_samples)
+    current_ts = snapshot.timestamp
+    if current_ts is not None:
+        if not samples or samples[-1].get("timestamp") != current_ts:
+            samples.append(
+                {
+                    "timestamp": current_ts,
+                    "open_spread": snapshot.open_spread,
+                    "close_spread": snapshot.close_spread,
+                }
+            )
+
+    payload: list[dict[str, float | str | None]] = []
+    for item in samples:
+        ts = item.get("timestamp")
+        beijing_time = None
+        if isinstance(ts, (int, float)):
+            beijing_time = datetime.fromtimestamp(ts, tz=BEIJING_TZ).isoformat()
+        payload.append(
+            {
+                "timestamp": ts,
+                "beijing_time": beijing_time,
+                "open_spread": item.get("open_spread"),
+                "close_spread": item.get("close_spread"),
+            }
+        )
+    return payload
+
+
 def maybe_trigger_spread_change_alerts(snapshot: Snapshot) -> None:
     if snapshot.ostium_is_market_open is False:
         return
@@ -307,6 +340,7 @@ def maybe_trigger_spread_change_alerts(snapshot: Snapshot) -> None:
                 "window_abs_move": window_abs_move,
                 "current_spread": current_value,
                 "direction": "区间波动放大",
+                "window_samples": build_spread_window_payload(window_samples, snapshot),
             },
         )
         state["spread_alert_armed"][spread_name] = False
