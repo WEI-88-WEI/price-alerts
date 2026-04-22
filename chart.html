@@ -131,6 +131,50 @@
         };
       }
 
+      if (event === 'open_spread_window_breakout') {
+        const startValue = item.window_min;
+        const endValue = item.window_max;
+        const deltaValue = item.window_abs_move;
+        return {
+          time: item.beijing_time,
+          day: item.beijing_time.slice(5, 10),
+          clock: item.beijing_time.slice(11, 16),
+          direction: '变大',
+          directionClass: 'up',
+          value: typeof item.current_spread === 'number' ? item.current_spread : item.snapshot?.open_spread,
+          changeText: `${fmtNum(startValue)} → ${fmtNum(endValue)}（${fmtSignedNum(deltaValue)}）`,
+          status,
+        };
+      }
+
+      if (event === 'open_cross_up') {
+        const endValue = item.snapshot?.open_spread;
+        return {
+          time: item.beijing_time,
+          day: item.beijing_time.slice(5, 10),
+          clock: item.beijing_time.slice(11, 16),
+          direction: '变大',
+          directionClass: 'up',
+          value: endValue,
+          changeText: fmtNum(endValue),
+          status,
+        };
+      }
+
+      if (event === 'close_cross_down') {
+        const endValue = item.snapshot?.close_spread;
+        return {
+          time: item.beijing_time,
+          day: item.beijing_time.slice(5, 10),
+          clock: item.beijing_time.slice(11, 16),
+          direction: '变小',
+          directionClass: 'down',
+          value: endValue,
+          changeText: fmtNum(endValue),
+          status,
+        };
+      }
+
       return null;
     }
 
