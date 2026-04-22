@@ -230,21 +230,13 @@
       const downs = items.filter(x => x.direction === '变小').length;
       const latest = items.at(-1);
       const maxSpread = items.reduce((m, x) => Math.max(m, x.value ?? -Infinity), -Infinity);
-      const maxDelta = items.reduce((m, x) => {
-        const text = x.changeText || '';
-        const match = text.match(/（([+-]?\d+(?:\.\d+)?)）/);
-        const delta = match ? Math.abs(Number(match[1])) : -Infinity;
-        return Math.max(m, delta);
-      }, -Infinity);
       document.getElementById('summary').innerHTML = [
         ['总提醒数', String(items.length)],
         ['变大提醒数', String(ups)],
         ['变小提醒数', String(downs)],
         ['最大记录价差', Number.isFinite(maxSpread) ? maxSpread.toFixed(4) : '-'],
-        ['最大单次变化', Number.isFinite(maxDelta) ? maxDelta.toFixed(4) : '-'],
         ['最近方向', latest?.direction || '-'],
         ['最近时间', latest ? latest.time.slice(11, 19) : '-'],
-        ['最近变化', latest?.changeText || '-'],
       ].map(([label, value]) => `
         <div class="card">
           <div class="label">${label}</div>
