@@ -22,7 +22,7 @@
 
 配置项：
 
-- `POLL_INTERVAL_SECONDS=5`
+- `POLL_INTERVAL_SECONDS=3`
 
 ## 价差提醒规则
 
