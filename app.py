@@ -24,6 +24,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger("price-alerts")
 BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 ALERTS_LOG_PATH = Path(__file__).with_name("alerts_log.jsonl")
+SPREAD_REARM_DELTA = 0.2
 
 
 def load_dotenv() -> None:
@@ -81,13 +82,10 @@ state: dict[str, Any] = {
     "spread_history_size": 0,
     "ostium_is_market_open": None,
     "spread_warmup_until": None,
-    "spread_alert_armed": {
-        "open_spread": True,
-        "close_spread": True,
-    },
-    "spread_breakout_confirm_counts": {
-        "open_spread": 0,
-        "close_spread": 0,
+    "spread_direction_state": "neutral",
+    "spread_direction_confirm_counts": {
+        "expand": 0,
+        "contract": 0,
     },
 }
 
@@ -293,57 +291,77 @@ def maybe_trigger_spread_change_alerts(snapshot: Snapshot) -> None:
     if isinstance(warmup_until, (int, float)) and time.time() < warmup_until:
         return
 
+    if snapshot.open_spread is None:
+        return
+
     window_samples = get_window_samples(SPREAD_CHANGE_WINDOW_SECONDS)
     if not window_samples:
         return
 
-    checks = [
-        ("open_spread", snapshot.open_spread),
-        ("close_spread", snapshot.close_spread),
-    ]
+    oldest_sample = window_samples[0]
+    oldest_open_spread = oldest_sample.get("open_spread")
+    if oldest_open_spread is None:
+        return
 
-    for spread_name, current_value in checks:
-        values = [item[spread_name] for item in window_samples]
-        values.append(current_value)
-        window_max = max(values)
-        window_min = min(values)
-        window_abs_move = window_max - window_min
+    current_open_spread = snapshot.open_spread
+    delta_60s = current_open_spread - oldest_open_spread
 
-        if window_abs_move <= SPREAD_CHANGE_THRESHOLD:
-            state["spread_alert_armed"][spread_name] = True
-            state["spread_breakout_confirm_counts"][spread_name] = 0
-            continue
+    if -SPREAD_REARM_DELTA < delta_60s < SPREAD_REARM_DELTA:
+        state["spread_direction_state"] = "neutral"
+        state["spread_direction_confirm_counts"] = {
+            "expand": 0,
+            "contract": 0,
+        }
+        return
 
-        state["spread_breakout_confirm_counts"][spread_name] += 1
-        confirm_count = state["spread_breakout_confirm_counts"][spread_name]
+    if delta_60s >= SPREAD_CHANGE_THRESHOLD:
+        direction = "expand"
+        event = "open_spread_expand_60s"
+        direction_text = "价差放大"
+    elif delta_60s <= -SPREAD_CHANGE_THRESHOLD:
+        direction = "contract"
+        event = "open_spread_contract_60s"
+        direction_text = "价差缩小"
+    else:
+        state["spread_direction_confirm_counts"] = {
+            "expand": 0,
+            "contract": 0,
+        }
+        return
 
-        if confirm_count < SPREAD_BREAKOUT_CONFIRM_SAMPLES:
-            continue
+    opposite = "contract" if direction == "expand" else "expand"
+    state["spread_direction_confirm_counts"][opposite] = 0
+    state["spread_direction_confirm_counts"][direction] += 1
+    confirm_count = state["spread_direction_confirm_counts"][direction]
 
-        if not state["spread_alert_armed"][spread_name]:
-            continue
+    if state.get("spread_direction_state") == direction:
+        return
 
-        event = f"{spread_name}_window_breakout"
-        trigger_phone_alert(
-            event,
-            snapshot,
-            alert_url=SPREAD_FWALERT_URL,
-            channel="spread",
-            extra={
-                "spread_name": spread_name,
-                "window_seconds": SPREAD_CHANGE_WINDOW_SECONDS,
-                "threshold": SPREAD_CHANGE_THRESHOLD,
-                "confirm_samples": SPREAD_BREAKOUT_CONFIRM_SAMPLES,
-                "confirm_count": confirm_count,
-                "window_max": window_max,
-                "window_min": window_min,
-                "window_abs_move": window_abs_move,
-                "current_spread": current_value,
-                "direction": "区间波动放大",
-                "window_samples": build_spread_window_payload(window_samples, snapshot),
-            },
-        )
-        state["spread_alert_armed"][spread_name] = False
+    if confirm_count < SPREAD_BREAKOUT_CONFIRM_SAMPLES:
+        return
+
+    trigger_phone_alert(
+        event,
+        snapshot,
+        alert_url=SPREAD_FWALERT_URL,
+        channel="spread",
+        extra={
+            "spread_name": "open_spread",
+            "window_seconds": SPREAD_CHANGE_WINDOW_SECONDS,
+            "threshold": SPREAD_CHANGE_THRESHOLD,
+            "confirm_samples": SPREAD_BREAKOUT_CONFIRM_SAMPLES,
+            "confirm_count": confirm_count,
+            "rearm_delta": SPREAD_REARM_DELTA,
+            "oldest_timestamp": oldest_sample.get("timestamp"),
+            "oldest_beijing_time": datetime.fromtimestamp(oldest_sample["timestamp"], tz=BEIJING_TZ).isoformat() if isinstance(oldest_sample.get("timestamp"), (int, float)) else None,
+            "oldest_open_spread": oldest_open_spread,
+            "current_open_spread": current_open_spread,
+            "delta_60s": delta_60s,
+            "direction": direction_text,
+            "window_samples": build_spread_window_payload(window_samples, snapshot),
+        },
+    )
+    state["spread_direction_state"] = direction
 
 
 def maybe_trigger_liquidation_alerts(snapshot: Snapshot) -> None:
@@ -417,13 +435,10 @@ def monitor_loop() -> None:
                 state["spread_warmup_until"] = None
             elif previous_market_open is False:
                 state["spread_warmup_until"] = time.time() + SPREAD_CHANGE_WINDOW_SECONDS
-                state["spread_alert_armed"] = {
-                    "open_spread": True,
-                    "close_spread": True,
-                }
-                state["spread_breakout_confirm_counts"] = {
-                    "open_spread": 0,
-                    "close_spread": 0,
+                state["spread_direction_state"] = "neutral"
+                state["spread_direction_confirm_counts"] = {
+                    "expand": 0,
+                    "contract": 0,
                 }
                 spread_history.clear()
             state["last_error"] = None
@@ -465,6 +480,9 @@ def root() -> dict[str, Any]:
         "spread_change_window_seconds": SPREAD_CHANGE_WINDOW_SECONDS,
         "spread_change_threshold": SPREAD_CHANGE_THRESHOLD,
         "spread_breakout_confirm_samples": SPREAD_BREAKOUT_CONFIRM_SAMPLES,
+        "spread_rearm_delta": SPREAD_REARM_DELTA,
+        "spread_direction_state": state["spread_direction_state"],
+        "spread_direction_confirm_counts": state["spread_direction_confirm_counts"],
         "trade_liquidation_price": TRADE_LIQUIDATION_PRICE,
         "ostium_liquidation_price": OSTIUM_LIQUIDATION_PRICE,
         "liquidation_alert_distance": LIQUIDATION_ALERT_DISTANCE,
@@ -481,6 +499,8 @@ def health() -> dict[str, Any]:
         "ok": state["last_error"] is None,
         "running": state["running"],
         "loop_count": state["loop_count"],
+        "spread_direction_state": state["spread_direction_state"],
+        "spread_direction_confirm_counts": state["spread_direction_confirm_counts"],
         "suppression_active": state["ostium_is_market_open"] is False,
         "suppression_reason": "ostium_market_closed" if state["ostium_is_market_open"] is False else None,
         "last_error": state["last_error"],
