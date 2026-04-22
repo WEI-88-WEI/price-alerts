@@ -120,13 +120,13 @@
           : spreadName === 'open_spread'
             ? item.snapshot?.open_spread
             : item.snapshot?.close_spread;
-        const direction = item.direction || '区间波动放大';
+        const direction = event.startsWith('open_') ? '变大' : '变小';
         return {
           time: item.beijing_time,
           day: item.beijing_time.slice(5, 10),
           clock: item.beijing_time.slice(11, 16),
           direction,
-          directionClass: 'up',
+          directionClass: event.startsWith('open_') ? 'up' : 'down',
           value: currentValue,
           source: spreadName,
           status,
@@ -155,6 +155,32 @@
           directionClass: 'down',
           value: item.snapshot?.close_spread,
           source: 'close_spread',
+          status,
+        };
+      }
+
+      if (event === 'open_spread_expand_60s') {
+        return {
+          time: item.beijing_time,
+          day: item.beijing_time.slice(5, 10),
+          clock: item.beijing_time.slice(11, 16),
+          direction: '变大',
+          directionClass: 'up',
+          value: typeof item.current_open_spread === 'number' ? item.current_open_spread : item.snapshot?.open_spread,
+          source: 'open_spread',
+          status,
+        };
+      }
+
+      if (event === 'open_spread_contract_60s') {
+        return {
+          time: item.beijing_time,
+          day: item.beijing_time.slice(5, 10),
+          clock: item.beijing_time.slice(11, 16),
+          direction: '变小',
+          directionClass: 'down',
+          value: typeof item.current_open_spread === 'number' ? item.current_open_spread : item.snapshot?.open_spread,
+          source: 'open_spread',
           status,
         };
       }
