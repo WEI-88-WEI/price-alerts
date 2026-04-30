@@ -54,11 +54,11 @@
 当 `delta_60s` 满足以下条件之一，并且达到连续确认次数后，就会触发提醒：
 
 1. **价差放大**
-   - `delta_60s >= 0.6`
+   - `delta_60s >= 0.48`
    - 事件名：`open_spread_expand_60s`
 
 2. **价差缩小**
-   - `delta_60s <= -0.6`
+   - `delta_60s <= -0.48`
    - 事件名：`open_spread_contract_60s`
 
 ### 触发方式
@@ -93,7 +93,7 @@ Ostium 从闭市切回开市后，会先进入 **60 秒 warm-up**：
 ### 当前配置
 
 - `SPREAD_CHANGE_WINDOW_SECONDS=60`
-- `SPREAD_CHANGE_THRESHOLD=0.6`
+- `SPREAD_CHANGE_THRESHOLD=0.48`
 - `SPREAD_BREAKOUT_CONFIRM_SAMPLES=3`
 - `SPREAD_REARM_DELTA=0.2`（代码常量）
 
@@ -273,7 +273,7 @@ SPREAD_FWALERT_URL=
 LIQUIDATION_FWALERT_URL=
 POLL_INTERVAL_SECONDS=5
 SPREAD_CHANGE_WINDOW_SECONDS=60
-SPREAD_CHANGE_THRESHOLD=0.6
+SPREAD_CHANGE_THRESHOLD=0.48
 SPREAD_BREAKOUT_CONFIRM_SAMPLES=3
 SYMBOL=CL
 TRADE_LIQUIDATION_PRICE=140
